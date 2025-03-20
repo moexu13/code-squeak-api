@@ -76,7 +76,40 @@ class GitHubPullRequestTool(BaseTool):
       }
     else:
       return [f"Error: {response.status_code} - {response.text}"]
+
+class GitHubCommentOnPullRequestTool(BaseTool):
+  name: str = "github_comment_on_pull_request"
+  description: str = "Add comments to a specific pull request"
+
+  def _run(self, pr_number: int, comment_body: str) -> str:
+    token = os.getenv("GITHUB_TOKEN")
+    repo = os.getenv("GITHUB_REPOSITORY")
+
+    headers = {
+      "Authorization": f"token {token}",
+      "Accept": "application/vnd.github.v3+json",
+    }
     
+    url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+
+    data = {
+      "body": comment_body,
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+    
+    if response.status_code in [200,201]:
+      comment = response.json()
+      return {
+        "id": comment["id"],
+        "body": comment["body"],
+        "created_at": comment["created_at"],
+        "html_url": comment["html_url"],
+        "user": comment["user"]["login"]
+      }
+    else:
+      return [f"Error: {response.status_code} - {response.text}"]
+
 def initialize_claude_agent():
   claude = ChatAnthropic(
     model=os.getenv("ANTHROPIC_MODEL"),
@@ -87,6 +120,7 @@ def initialize_claude_agent():
   github_tools = [
     GitHubListPullRequestTool(),
     GitHubPullRequestTool(),
+    GitHubCommentOnPullRequestTool(),
   ]
 
   functions = [convert_to_openai_function(tool) for tool in github_tools]
