@@ -6,14 +6,22 @@
     "zip": "zip -j lambda.zip dist/index.js",
     "update": "aws lambda update-function-code --zip-file fileb://lambda.zip --function-name hello",
     "deploy": "run-s build zip update",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json}\""
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
+    "@hono/node-server": "^1.14.0",
+    "@types/aws-lambda": "^8.10.148",
     "@types/node": "^22.13.14",
+    "@types/supertest": "^6.0.3",
     "adr": "^1.5.2",
     "esbuild": "^0.21.4",
     "npm-run-all2": "^6.2.0",
-    "prettier": "^3.5.3"
+    "prettier": "^3.5.3",
+    "supertest": "^7.1.0",
+    "vitest": "^3.0.9"
   },
   "dependencies": {
     "hono": "^4.7.5"
