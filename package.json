@@ -5,13 +5,15 @@
     "build": "esbuild --bundle --outfile=./dist/index.js --platform=node --target=node20 ./src/index.ts",
     "zip": "zip -j lambda.zip dist/index.js",
     "update": "aws lambda update-function-code --zip-file fileb://lambda.zip --function-name hello",
-    "deploy": "run-s build zip update"
+    "deploy": "run-s build zip update",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json}\""
   },
   "devDependencies": {
     "@types/node": "^22.13.14",
     "adr": "^1.5.2",
     "esbuild": "^0.21.4",
-    "npm-run-all2": "^6.2.0"
+    "npm-run-all2": "^6.2.0",
+    "prettier": "^3.5.3"
   },
   "dependencies": {
     "hono": "^4.7.5"
