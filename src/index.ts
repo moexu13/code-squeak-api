@@ -7,8 +7,15 @@ app.get("/", (c) => {
   return c.text("Hello Hono!");
 });
 
+if (import.meta.env.DEV) {
+  console.log('🔥 Dev server started');
+}
+
 // Export the app for testing
 export { app };
 
-// Create a handler function by passing the Hono app to the handle function
+// Export the handler for AWS Lambda
 export const handler = handle(app);
+
+// Add default export for Vite dev server
+export default app;

@@ -2,6 +2,7 @@
   "name": "code-squeak-api",
   "type": "module",
   "scripts": {
+    "dev": "vite",
     "build": "esbuild --bundle --outfile=./dist/index.js --platform=node --target=node20 ./src/index.ts",
     "zip": "zip -j lambda.zip dist/index.js",
     "update": "aws lambda update-function-code --zip-file fileb://lambda.zip --function-name hello",
@@ -24,6 +25,8 @@
     "vitest": "^3.0.9"
   },
   "dependencies": {
-    "hono": "^4.7.5"
+    "@hono/vite-dev-server": "^0.19.0",
+    "hono": "^4.7.5",
+    "vite": "^6.2.3"
   }
 }
