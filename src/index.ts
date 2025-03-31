@@ -11,7 +11,7 @@ app.get("/", (c) => {
 app.route("/gh", gh_app);
 
 if (import.meta.env.DEV) {
-  console.log('🔥 Dev server started');
+  console.log("🔥 Dev server started");
 }
 
 // Export the app for testing
