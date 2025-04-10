@@ -1,14 +1,26 @@
 import { Hono } from "hono";
 import { handle } from "hono/aws-lambda";
-import gh_app from "./gh/gh.routes";
+import { Context, Next } from "hono";
+import apiRouter from "./api/api.routes";
+import { config } from "dotenv";
 
-const app = new Hono();
+// Load environment variables
+config();
 
-app.get("/", (c) => {
+type Variables = {
+  apiKey: string;
+  repoName: string;
+};
+
+const app = new Hono<{ Variables: Variables }>();
+
+// Root route
+app.get("/", (c: Context) => {
   return c.text("Hello Hono!");
 });
 
-app.route("/gh", gh_app);
+// Mount the API routes
+app.route("/v1/api", apiRouter);
 
 if (import.meta.env.DEV) {
   console.log("🔥 Dev server started");
