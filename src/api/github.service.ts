@@ -1,5 +1,4 @@
 import { Octokit } from "@octokit/rest";
-import { Anthropic } from "@anthropic-ai/sdk";
 
 export class GitHubService {
   private octokit: Octokit;
@@ -36,28 +35,4 @@ export class GitHubService {
       );
     }
   }
-}
-
-interface ClaudeOptions {
-  model?: string;
-  maxTokens?: number;
-  temperature?: number;
-}
-
-export class ClaudeClient {
-  private client: Anthropic;
-
-  constructor() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-
-    if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY environment variable is required");
-    }
-
-    this.client = new Anthropic({
-      apiKey,
-    });
-  }
-
-  // ... rest of the code ...
 }
