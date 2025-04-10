@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { GitHubService } from "../src/api/github.service";
 import { config } from "dotenv";
-import { resolve } from "path";
+import { Context } from "hono";
 
 describe("GitHubService", () => {
   let githubService: GitHubService;
+  const mockContext = {
+    error: console.error,
+    log: console.log,
+  } as unknown as Context;
 
   beforeAll(() => {
     // Load environment variables from .env file
@@ -14,7 +18,7 @@ describe("GitHubService", () => {
     if (!token) {
       throw new Error("GITHUB_TOKEN environment variable is required for tests");
     }
-    githubService = new GitHubService(token);
+    githubService = new GitHubService(token, mockContext);
   });
 
   it("should be able to fetch pull requests from a public repository", async () => {

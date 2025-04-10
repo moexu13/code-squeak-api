@@ -1,4 +1,5 @@
 import { Anthropic } from "@anthropic-ai/sdk";
+import { Context } from "hono";
 
 interface ClaudeOptions {
   model?: string;
@@ -9,8 +10,10 @@ interface ClaudeOptions {
 
 export class ClaudeService {
   private client: Anthropic;
+  private context: Context;
 
-  constructor() {
+  constructor(context: Context) {
+    this.context = context;
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error("ANTHROPIC_API_KEY environment variable is required");
@@ -44,7 +47,7 @@ export class ClaudeService {
       }
       return content.text;
     } catch (error) {
-      console.error("Claude API Error:", error);
+      this.context.error("Claude API Error:", error);
       throw new Error(
         `Claude API Error: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -78,7 +81,7 @@ export class ClaudeService {
         },
       });
     } catch (error) {
-      console.error("Claude API Error:", error);
+      this.context.error("Claude API Error:", error);
       throw new Error(
         `Claude API Error: ${error instanceof Error ? error.message : String(error)}`
       );

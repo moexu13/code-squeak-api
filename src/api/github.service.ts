@@ -1,9 +1,13 @@
 import { Octokit } from "@octokit/rest";
+import { Anthropic } from "@anthropic-ai/sdk";
+import { Context } from "hono";
 
 export class GitHubService {
   private octokit: Octokit;
+  private context: Context;
 
-  constructor(token: string) {
+  constructor(token: string, context: Context) {
+    this.context = context;
     this.octokit = new Octokit({
       auth: token,
     });
@@ -29,10 +33,36 @@ export class GitHubService {
         user: pr.user?.login,
       }));
     } catch (error) {
-      console.error("GitHub API Error:", error);
+      this.context.error("GitHub API Error:", error);
       throw new Error(
         `Failed to fetch pull requests: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
+}
+
+interface ClaudeOptions {
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+}
+
+export class ClaudeClient {
+  private client: Anthropic;
+  private context: Context;
+
+  constructor(context: Context) {
+    this.context = context;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+
+    if (!apiKey) {
+      throw new Error("ANTHROPIC_API_KEY environment variable is required");
+    }
+
+    this.client = new Anthropic({
+      apiKey,
+    });
+  }
+
+  // ... rest of the code ...
 }
