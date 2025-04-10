@@ -10,10 +10,10 @@ export class ClaudeService {
   private client: Anthropic;
 
   constructor() {
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
-      throw new Error("VITE_ANTHROPIC_API_KEY environment variable is required");
+      throw new Error("ANTHROPIC_API_KEY environment variable is required");
     }
 
     this.client = new Anthropic({
@@ -27,7 +27,7 @@ export class ClaudeService {
     options: ClaudeOptions = {}
   ): Promise<string> {
     const {
-      model = import.meta.env.VITE_CLAUDE_MODEL,
+      model = process.env.CLAUDE_MODEL || "claude-3-haiku-20240307",
       maxTokens = 1024,
       temperature = 0.7,
     } = options;
@@ -60,7 +60,7 @@ export class ClaudeService {
     options: ClaudeOptions = {}
   ): Promise<ReadableStream> {
     const {
-      model = import.meta.env.VITE_CLAUDE_MODEL,
+      model = process.env.CLAUDE_MODEL || "claude-3-haiku-20240307",
       maxTokens = 1024,
       temperature = 0.7,
     } = options;
