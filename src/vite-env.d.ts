@@ -8,4 +8,4 @@ interface ImportMeta {
     readonly SSR: boolean;
     [key: string]: any;
   };
-} 
+}

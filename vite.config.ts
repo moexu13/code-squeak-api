@@ -1,17 +1,17 @@
-import { defineConfig } from 'vite';
-import devServer from '@hono/vite-dev-server';
-import { configDefaults } from 'vitest/config';
+import { defineConfig } from "vite";
+import devServer from "@hono/vite-dev-server";
+import { configDefaults } from "vitest/config";
 
 export default defineConfig({
   plugins: [
     devServer({
-      entry: './src/index.ts', // Path to your Hono app entry
+      entry: "./src/index.ts", // Path to your Hono app entry
       exclude: [
         // Exclude lambda-specific code from dev server
-        '**/*.test.ts',
-        './dist/**' 
-      ]
-    })
+        "**/*.test.ts",
+        "./dist/**",
+      ],
+    }),
   ],
   // Vitest configuration
   test: {
@@ -30,5 +30,5 @@ export default defineConfig({
     },
     // Silent by default, change to false if you want more verbose output
     silent: false,
-  }
-}); 
+  },
+});
