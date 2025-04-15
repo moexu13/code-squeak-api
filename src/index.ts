@@ -4,9 +4,17 @@ import { Context, Next } from "hono";
 import apiRouter from "./api/api.routes";
 import { config } from "dotenv";
 import logger from "./utils/logger";
+import { validateEnv } from "./utils/env";
 
 // Load environment variables
 config();
+
+// Validate environment variables
+validateEnv({
+  GITHUB_TOKEN: process.env.GITHUB_TOKEN || "",
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "",
+  LOG_LEVEL: process.env.LOG_LEVEL,
+});
 
 type Variables = {
   apiKey: string;
@@ -18,7 +26,7 @@ const app = new Hono<{ Variables: Variables }>();
 // Root route
 app.get("/", (c: Context) => {
   logger.info({ context: "App" }, "Root route accessed");
-  return c.text("Hello Hono!");
+  return c.text("Code Squeak API");
 });
 
 // Mount the API routes

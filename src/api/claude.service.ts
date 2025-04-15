@@ -1,6 +1,6 @@
 import { Anthropic } from "@anthropic-ai/sdk";
-import { Context } from "hono";
 import logger from "../utils/logger";
+import { RateLimiter } from "../utils/rateLimiter";
 
 interface ClaudeOptions {
   model?: string;
@@ -11,10 +11,11 @@ interface ClaudeOptions {
 
 export class ClaudeService {
   private client: Anthropic;
-  private context: Context;
+  private rateLimiter: RateLimiter;
+  private defaultMaxTokens: number;
+  private defaultTemperature: number;
 
-  constructor(context: Context) {
-    this.context = context;
+  constructor() {
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
@@ -28,17 +29,39 @@ export class ClaudeService {
     this.client = new Anthropic({
       apiKey,
     });
+
+    // Initialize rate limiter: 3 requests per minute
+    this.rateLimiter = new RateLimiter({
+      maxRequests: 3,
+      timeWindow: 60 * 1000, // 1 minute
+    });
+
+    // Set default values from environment variables with fallbacks
+    this.defaultMaxTokens = parseInt(process.env.CLAUDE_MAX_TOKENS || "1024", 10);
+    this.defaultTemperature = parseFloat(process.env.CLAUDE_TEMPERATURE || "0.7");
+
+    logger.debug(
+      {
+        defaultMaxTokens: this.defaultMaxTokens,
+        defaultTemperature: this.defaultTemperature,
+        context: "ClaudeService",
+      },
+      "Initialized ClaudeService with default values"
+    );
   }
 
   async sendMessage(prompt: string, options: ClaudeOptions = {}): Promise<string> {
     const {
       model = process.env.CLAUDE_MODEL || "claude-3-haiku-20240307",
-      maxTokens = 1024,
-      temperature = 0.7,
+      maxTokens = this.defaultMaxTokens,
+      temperature = this.defaultTemperature,
       systemPrompt,
     } = options;
 
     try {
+      // Wait for a rate limit slot
+      await this.rateLimiter.waitForSlot();
+
       logger.debug(
         {
           model,
@@ -97,12 +120,15 @@ export class ClaudeService {
   async streamMessage(prompt: string, options: ClaudeOptions = {}): Promise<ReadableStream> {
     const {
       model = process.env.CLAUDE_MODEL || "claude-3-haiku-20240307",
-      maxTokens = 1024,
-      temperature = 0.7,
+      maxTokens = this.defaultMaxTokens,
+      temperature = this.defaultTemperature,
       systemPrompt,
     } = options;
 
     try {
+      // Wait for a rate limit slot
+      await this.rateLimiter.waitForSlot();
+
       logger.debug(
         {
           model,
