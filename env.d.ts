@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_GITHUB_APP_ID: string;
   readonly VITE_GITHUB_TOKEN: string;
   readonly VITE_GITHUB_WEBHOOK_SECRET: string;
+  readonly LOG_LEVEL: string;
 }
 
 interface ImportMeta {

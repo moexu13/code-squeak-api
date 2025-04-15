@@ -1,5 +1,6 @@
 import { Anthropic } from "@anthropic-ai/sdk";
 import { Context } from "hono";
+import logger from "../utils/logger";
 
 interface ClaudeOptions {
   model?: string;
@@ -15,7 +16,12 @@ export class ClaudeService {
   constructor(context: Context) {
     this.context = context;
     const apiKey = process.env.ANTHROPIC_API_KEY;
+
     if (!apiKey) {
+      logger.error(
+        { context: "ClaudeService" },
+        "ANTHROPIC_API_KEY environment variable is required"
+      );
       throw new Error("ANTHROPIC_API_KEY environment variable is required");
     }
 
@@ -33,6 +39,17 @@ export class ClaudeService {
     } = options;
 
     try {
+      logger.debug(
+        {
+          model,
+          maxTokens,
+          temperature,
+          hasSystemPrompt: !!systemPrompt,
+          context: "ClaudeService",
+        },
+        "Sending message to Claude"
+      );
+
       const response = await this.client.messages.create({
         model,
         max_tokens: maxTokens,
@@ -43,11 +60,34 @@ export class ClaudeService {
 
       const content = response.content[0];
       if (content.type !== "text") {
+        logger.error(
+          {
+            type: content.type,
+            context: "ClaudeService",
+          },
+          "Unexpected response type from Claude"
+        );
         throw new Error("Unexpected response type from Claude");
       }
+
+      logger.debug(
+        {
+          responseLength: content.text.length,
+          context: "ClaudeService",
+        },
+        "Received response from Claude"
+      );
+
       return content.text;
     } catch (error) {
-      this.context.error("Claude API Error:", error);
+      logger.error(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          model,
+          context: "ClaudeService",
+        },
+        "Failed to send message to Claude"
+      );
       throw new Error(
         `Claude API Error: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -63,6 +103,17 @@ export class ClaudeService {
     } = options;
 
     try {
+      logger.debug(
+        {
+          model,
+          maxTokens,
+          temperature,
+          hasSystemPrompt: !!systemPrompt,
+          context: "ClaudeService",
+        },
+        "Starting Claude stream"
+      );
+
       const stream = await this.client.messages.create({
         model,
         max_tokens: maxTokens,
@@ -81,7 +132,14 @@ export class ClaudeService {
         },
       });
     } catch (error) {
-      this.context.error("Claude API Error:", error);
+      logger.error(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          model,
+          context: "ClaudeService",
+        },
+        "Failed to start Claude stream"
+      );
       throw new Error(
         `Claude API Error: ${error instanceof Error ? error.message : String(error)}`
       );

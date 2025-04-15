@@ -1,6 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import { Anthropic } from "@anthropic-ai/sdk";
 import { Context } from "hono";
+import logger from "../utils/logger";
 
 export class GitHubService {
   private octokit: Octokit;
@@ -33,7 +34,15 @@ export class GitHubService {
         user: pr.user?.login,
       }));
     } catch (error) {
-      this.context.error("GitHub API Error:", error);
+      logger.error(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          owner,
+          repo,
+          context: "GitHub API Error",
+        },
+        "Failed to fetch pull requests"
+      );
       throw new Error(
         `Failed to fetch pull requests: ${error instanceof Error ? error.message : String(error)}`
       );

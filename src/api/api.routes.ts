@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { Context, Next } from "hono";
 import { GitHubService } from "./github.service";
 import { ClaudeService } from "./claude.service";
+import logger from "../utils/logger";
 
 type Variables = {
   apiKey: string;
@@ -14,19 +15,25 @@ const apiRouter = new Hono<{ Variables: Variables }>();
 apiRouter.use("*", async (c: Context<{ Variables: Variables }>, next: Next) => {
   const apiKey = process.env.GITHUB_TOKEN;
 
-  // Safely log if c.log is available
-  if (typeof c.log === "function") {
-    c.log("Middleware environment check:", {
+  logger.debug(
+    {
       hasProcessToken: !!process.env.GITHUB_TOKEN,
       tokenLength: apiKey?.length,
       environment: process.env.NODE_ENV,
-    });
-  }
+      context: "API Middleware",
+    },
+    "Checking GitHub token"
+  );
 
   if (!apiKey) {
-    if (typeof c.log === "function") {
-      c.log("Error: GitHub token not found in environment variables");
-    }
+    logger.error(
+      {
+        hasProcessToken: false,
+        environment: process.env.NODE_ENV,
+        context: "API Middleware",
+      },
+      "GitHub token not found in environment variables"
+    );
     return c.json(
       {
         error: "GitHub token not configured",
@@ -40,9 +47,14 @@ apiRouter.use("*", async (c: Context<{ Variables: Variables }>, next: Next) => {
   }
 
   if (apiKey.length < 40) {
-    if (typeof c.log === "function") {
-      c.log("Error: GitHub token appears to be invalid (too short)");
-    }
+    logger.error(
+      {
+        tokenLength: apiKey.length,
+        expectedLength: ">= 40",
+        context: "API Middleware",
+      },
+      "GitHub token appears to be invalid (too short)"
+    );
     return c.json(
       {
         error: "Invalid GitHub token configuration",
@@ -61,13 +73,33 @@ apiRouter.use("*", async (c: Context<{ Variables: Variables }>, next: Next) => {
 
 // API routes
 apiRouter.get("/", (c: Context) => {
+  logger.info({ context: "API Routes" }, "Root endpoint accessed");
   return c.text("API is running");
 });
 
 apiRouter.get("/:owner/:repoName", async (c: Context) => {
   const { owner, repoName } = c.req.param();
+  logger.info(
+    {
+      owner,
+      repoName,
+      context: "API Routes",
+    },
+    "Fetching pull requests"
+  );
+
   const githubService = new GitHubService(c.get("apiKey"), c);
   const pullRequests = await githubService.listPullRequests(owner, repoName);
+
+  logger.debug(
+    {
+      owner,
+      repoName,
+      pullRequestCount: pullRequests.length,
+      context: "API Routes",
+    },
+    "Successfully fetched pull requests"
+  );
 
   return c.json({ pullRequests });
 });

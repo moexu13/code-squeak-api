@@ -23,6 +23,12 @@ importers:
       hono:
         specifier: ^4.7.6
         version: 4.7.6
+      pino:
+        specifier: ^9.6.0
+        version: 9.6.0
+      pino-pretty:
+        specifier: ^13.0.0
+        version: 13.0.0
       probot:
         specifier: ^13.4.5
         version: 13.4.5

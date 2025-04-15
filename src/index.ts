@@ -3,6 +3,7 @@ import { handle } from "hono/aws-lambda";
 import { Context, Next } from "hono";
 import apiRouter from "./api/api.routes";
 import { config } from "dotenv";
+import logger from "./utils/logger";
 
 // Load environment variables
 config();
@@ -16,6 +17,7 @@ const app = new Hono<{ Variables: Variables }>();
 
 // Root route
 app.get("/", (c: Context) => {
+  logger.info({ context: "App" }, "Root route accessed");
   return c.text("Hello Hono!");
 });
 
@@ -23,7 +25,7 @@ app.get("/", (c: Context) => {
 app.route("/v1/api", apiRouter);
 
 if (import.meta.env.DEV) {
-  console.log("🔥 Dev server started");
+  logger.info({ context: "App" }, "🔥 Dev server started");
 }
 
 // Export the app for testing
