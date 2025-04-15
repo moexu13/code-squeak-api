@@ -19,7 +19,7 @@ describe("ClaudeService", () => {
       throw new Error("ANTHROPIC_API_KEY environment variable is required for tests");
     }
 
-    claudeService = new ClaudeService(mockContext);
+    claudeService = new ClaudeService();
   });
 
   it(

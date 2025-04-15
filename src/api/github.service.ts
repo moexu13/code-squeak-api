@@ -19,7 +19,7 @@ export class GitHubService {
       const { data: pullRequests } = await this.octokit.pulls.list({
         owner,
         repo,
-        state: "all", // 'open', 'closed', or 'all'
+        state: "open", // 'open', 'closed', or 'all'
         sort: "updated",
         direction: "desc",
       });
@@ -48,6 +48,52 @@ export class GitHubService {
       );
     }
   }
+
+  async getPullRequest(owner: string, repo: string, pullNumber: number) {
+    try {
+      const { data: pullRequest } = await this.octokit.pulls.get({
+        owner,
+        repo,
+        pull_number: pullNumber,
+      });
+
+      // Get the diff
+      const { data: diff } = (await this.octokit.pulls.get({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        mediaType: {
+          format: "diff",
+        },
+      })) as unknown as { data: string };
+
+      return {
+        number: pullRequest.number,
+        title: pullRequest.title,
+        body: pullRequest.body,
+        state: pullRequest.state,
+        url: pullRequest.html_url,
+        createdAt: pullRequest.created_at,
+        updatedAt: pullRequest.updated_at,
+        user: pullRequest.user?.login,
+        diff: diff,
+      };
+    } catch (error) {
+      logger.error(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          owner,
+          repo,
+          pullNumber,
+          context: "GitHub API Error",
+        },
+        "Failed to fetch pull request"
+      );
+      throw new Error(
+        `Failed to fetch pull request: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
 }
 
 interface ClaudeOptions {
@@ -72,6 +118,4 @@ export class ClaudeClient {
       apiKey,
     });
   }
-
-  // ... rest of the code ...
 }

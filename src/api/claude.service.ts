@@ -1,5 +1,4 @@
 import { Anthropic } from "@anthropic-ai/sdk";
-import { Context } from "hono";
 import logger from "../utils/logger";
 
 interface ClaudeOptions {
@@ -11,10 +10,8 @@ interface ClaudeOptions {
 
 export class ClaudeService {
   private client: Anthropic;
-  private context: Context;
 
-  constructor(context: Context) {
-    this.context = context;
+  constructor() {
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {

@@ -104,4 +104,76 @@ apiRouter.get("/:owner/:repoName", async (c: Context) => {
   return c.json({ pullRequests });
 });
 
+apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", async (c: Context) => {
+  const { owner, repoName, pullNumber } = c.req.param();
+  logger.info(
+    {
+      owner,
+      repoName,
+      pullNumber,
+      context: "API Routes",
+    },
+    "Analyzing pull request"
+  );
+
+  const githubService = new GitHubService(c.get("apiKey"), c);
+  const claudeService = new ClaudeService();
+
+  try {
+    const pullRequest = await githubService.getPullRequest(owner, repoName, parseInt(pullNumber));
+
+    const analysisPrompt = `You are a senior software engineer. Please analyze this GitHub pull request and provide feedback:
+
+Title: ${pullRequest.title}
+Description: ${pullRequest.body || "No description provided"}
+Author: ${pullRequest.user}
+State: ${pullRequest.state}
+URL: ${pullRequest.url}
+
+Changes:
+${pullRequest.diff}
+
+Please provide:
+1. A summary of the changes
+2. Potential issues or concerns
+3. Suggestions for improvement
+4. Whether the pull request should be accepted or rejected`;
+
+    const analysis = await claudeService.sendMessage(analysisPrompt, {
+      maxTokens: 2000,
+      temperature: 0.7,
+    });
+
+    logger.debug(
+      {
+        owner,
+        repoName,
+        pullNumber,
+        context: "API Routes",
+      },
+      "Successfully analyzed pull request"
+    );
+
+    return c.json({
+      pullRequest: {
+        ...pullRequest,
+        diff: undefined, // Remove the diff from the response
+      },
+      analysis,
+    });
+  } catch (error) {
+    logger.error(
+      {
+        error: error instanceof Error ? error.message : String(error),
+        owner,
+        repoName,
+        pullNumber,
+        context: "API Routes",
+      },
+      "Failed to analyze pull request"
+    );
+    throw error;
+  }
+});
+
 export default apiRouter;
