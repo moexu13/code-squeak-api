@@ -1,14 +1,10 @@
 import { Octokit } from "@octokit/rest";
-import { Anthropic } from "@anthropic-ai/sdk";
-import { Context } from "hono";
 import logger from "../utils/logger";
 
 export class GitHubService {
   private octokit: Octokit;
-  private context: Context;
 
-  constructor(token: string, context: Context) {
-    this.context = context;
+  constructor(token: string) {
     this.octokit = new Octokit({
       auth: token,
     });
@@ -19,7 +15,7 @@ export class GitHubService {
       const { data: pullRequests } = await this.octokit.pulls.list({
         owner,
         repo,
-        state: "open", // 'open', 'closed', or 'all'
+        state: "open",
         sort: "updated",
         direction: "desc",
       });
@@ -57,7 +53,7 @@ export class GitHubService {
         pull_number: pullNumber,
       });
 
-      // Get the diff
+      // Get the diff with a limit on size
       const { data: diff } = (await this.octokit.pulls.get({
         owner,
         repo,
@@ -66,6 +62,9 @@ export class GitHubService {
           format: "diff",
         },
       })) as unknown as { data: string };
+
+      // Filter sensitive information and limit size
+      const filteredDiff = this.filterDiff(diff);
 
       return {
         number: pullRequest.number,
@@ -76,7 +75,7 @@ export class GitHubService {
         createdAt: pullRequest.created_at,
         updatedAt: pullRequest.updated_at,
         user: pullRequest.user?.login,
-        diff: diff,
+        diff: filteredDiff,
       };
     } catch (error) {
       logger.error(
@@ -94,28 +93,27 @@ export class GitHubService {
       );
     }
   }
-}
 
-interface ClaudeOptions {
-  model?: string;
-  maxTokens?: number;
-  temperature?: number;
-}
-
-export class ClaudeClient {
-  private client: Anthropic;
-  private context: Context;
-
-  constructor(context: Context) {
-    this.context = context;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-
-    if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY environment variable is required");
+  private filterDiff(diff: string): string {
+    // Limit the diff size to 10KB
+    const MAX_DIFF_SIZE = 10 * 1024;
+    if (diff.length > MAX_DIFF_SIZE) {
+      diff = diff.substring(0, MAX_DIFF_SIZE) + "\n... (diff truncated)";
     }
 
-    this.client = new Anthropic({
-      apiKey,
+    // Remove sensitive patterns
+    const sensitivePatterns = [
+      /api[_-]?key["']?\s*[:=]\s*["'][^"']+["']/gi,
+      /secret["']?\s*[:=]\s*["'][^"']+["']/gi,
+      /password["']?\s*[:=]\s*["'][^"']+["']/gi,
+      /token["']?\s*[:=]\s*["'][^"']+["']/gi,
+      /credential["']?\s*[:=]\s*["'][^"']+["']/gi,
+    ];
+
+    sensitivePatterns.forEach((pattern) => {
+      diff = diff.replace(pattern, "[REDACTED]");
     });
+
+    return diff;
   }
 }

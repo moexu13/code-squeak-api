@@ -88,7 +88,7 @@ apiRouter.get("/:owner/:repoName", async (c: Context) => {
     "Fetching pull requests"
   );
 
-  const githubService = new GitHubService(c.get("apiKey"), c);
+  const githubService = new GitHubService(c.get("apiKey"));
   const pullRequests = await githubService.listPullRequests(owner, repoName);
 
   logger.debug(
@@ -116,13 +116,13 @@ apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", async (c: Context) =
     "Analyzing pull request"
   );
 
-  const githubService = new GitHubService(c.get("apiKey"), c);
+  const githubService = new GitHubService(c.get("apiKey"));
   const claudeService = new ClaudeService();
 
   try {
     const pullRequest = await githubService.getPullRequest(owner, repoName, parseInt(pullNumber));
 
-    const analysisPrompt = `You are a senior software engineer. Please analyze this GitHub pull request and provide feedback:
+    const analysisPrompt = `You are a senior software engineer reviewing a pull request. Please analyze the following changes and provide focused feedback:
 
 Title: ${pullRequest.title}
 Description: ${pullRequest.body || "No description provided"}
@@ -133,14 +133,16 @@ URL: ${pullRequest.url}
 Changes:
 ${pullRequest.diff}
 
-Please provide:
-1. A summary of the changes
-2. Potential issues or concerns
-3. Suggestions for improvement
-4. Whether the pull request should be accepted or rejected`;
+Please provide a concise analysis focusing on:
+1. Code quality and maintainability
+2. Potential bugs or edge cases
+3. Security implications
+4. Performance considerations
+
+Keep the analysis focused on the technical aspects of the changes.`;
 
     const analysis = await claudeService.sendMessage(analysisPrompt, {
-      maxTokens: 2000,
+      maxTokens: 1000,
       temperature: 0.7,
     });
 
