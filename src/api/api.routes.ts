@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { Context, Next } from "hono";
 import { GitHubService } from "./github.service";
 import { ClaudeService } from "./claude.service";
+import { Sanitizer } from "../utils/sanitizer";
 import logger from "../utils/logger";
 
 type Variables = {
@@ -170,16 +171,20 @@ apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", validateParams, asyn
   try {
     const pullRequest = await githubService.getPullRequest(owner, repoName, parseInt(pullNumber));
 
-    const analysisPrompt = `You are a senior software engineer reviewing a pull request. Please analyze the following changes and provide focused feedback:
+    // Sanitize pull request data
+    const sanitizedData = Sanitizer.sanitizePullRequestData(pullRequest);
 
-Title: ${pullRequest.title}
-Description: ${pullRequest.body || "No description provided"}
-Author: ${pullRequest.user}
-State: ${pullRequest.state}
-URL: ${pullRequest.url}
+    const analysisPrompt =
+      Sanitizer.sanitizePrompt(`You are a senior software engineer reviewing a pull request. Please analyze the following changes and provide focused feedback:
+
+Title: ${sanitizedData.title}
+Description: ${sanitizedData.body || "No description provided"}
+Author: ${sanitizedData.user}
+State: ${sanitizedData.state}
+URL: ${sanitizedData.url}
 
 Changes:
-${pullRequest.diff}
+${sanitizedData.diff}
 
 Please provide a concise analysis focusing on:
 1. Code quality and maintainability
@@ -187,7 +192,7 @@ Please provide a concise analysis focusing on:
 3. Security implications
 4. Performance considerations
 
-Keep the analysis focused on the technical aspects of the changes.`;
+Keep the analysis focused on the technical aspects of the changes.`);
 
     const analysis = await claudeService.sendMessage(analysisPrompt, {
       maxTokens: 1000,
@@ -206,7 +211,7 @@ Keep the analysis focused on the technical aspects of the changes.`;
 
     return c.json({
       pullRequest: {
-        ...pullRequest,
+        ...sanitizedData,
         diff: undefined, // Remove the diff from the response
       },
       analysis,
