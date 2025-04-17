@@ -40,7 +40,7 @@ describe("ClaudeService", () => {
   beforeEach(() => {
     process.env = {
       ...originalEnv,
-      CLAUDE_API_KEY: "test-key",
+      ANTHROPIC_API_KEY: "test-key",
       CLAUDE_MODEL: "test-model",
       CLAUDE_MAX_TOKENS: "500",
       CLAUDE_TEMPERATURE: "0.5",
@@ -54,9 +54,9 @@ describe("ClaudeService", () => {
   });
 
   describe("constructor", () => {
-    it("should throw error if CLAUDE_API_KEY is not set", () => {
-      delete process.env.CLAUDE_API_KEY;
-      expect(() => new ClaudeService()).toThrow("Claude API key not configured");
+    it("should throw error if ANTHROPIC_API_KEY is not set", () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      expect(() => new ClaudeService()).toThrow("Anthropic API key not configured");
     });
 
     it("should initialize with default values if environment variables are not set", () => {
