@@ -4,6 +4,7 @@ import { GitHubService } from "./github.service";
 import { ClaudeService } from "./claude.service";
 import { Sanitizer } from "../utils/sanitizer";
 import logger from "../utils/logger";
+import { validateOwner, validateRepo, ValidationError } from "../utils/validator";
 
 type Variables = {
   apiKey: string;
@@ -16,48 +17,32 @@ const apiRouter = new Hono<{ Variables: Variables }>();
 const validateParams = async (c: Context, next: Next) => {
   const { owner, repoName, pullNumber } = c.req.param();
 
-  // Validate owner (GitHub username)
-  if (!owner || !/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/.test(owner)) {
-    logger.warn({ owner, context: "API Validation" }, "Invalid owner parameter");
-    return c.json(
-      {
-        error: "Invalid owner parameter",
-        details:
-          "Owner must be a valid GitHub username (1-39 characters, alphanumeric or hyphen, cannot start or end with hyphen)",
-      },
-      400
-    );
-  }
+  try {
+    validateOwner(owner);
+    validateRepo(repoName);
 
-  // Validate repository name
-  if (!repoName || !/^[a-zA-Z0-9_.-]{1,100}$/.test(repoName)) {
-    logger.warn({ repoName, context: "API Validation" }, "Invalid repository name");
-    return c.json(
-      {
-        error: "Invalid repository name",
-        details:
-          "Repository name must be 1-100 characters and contain only alphanumeric, underscore, hyphen, or period",
-      },
-      400
-    );
-  }
-
-  // Validate pull request number if present
-  if (pullNumber) {
-    const pullNum = parseInt(pullNumber, 10);
-    if (isNaN(pullNum) || pullNum <= 0) {
-      logger.warn({ pullNumber, context: "API Validation" }, "Invalid pull request number");
-      return c.json(
-        {
-          error: "Invalid pull request number",
-          details: "Pull request number must be a positive integer",
-        },
-        400
-      );
+    // Validate pull request number if present
+    if (pullNumber) {
+      const pullNum = parseInt(pullNumber, 10);
+      if (isNaN(pullNum) || pullNum <= 0) {
+        return c.json(
+          {
+            error: "Invalid pull request number",
+            details: "Pull request number must be a positive integer",
+          },
+          400
+        );
+      }
     }
-  }
 
-  await next();
+    await next();
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      logger.warn({ error: error.message, context: "API Validation" }, "Validation error");
+      return c.json({ error: error.message }, 400);
+    }
+    throw error;
+  }
 };
 
 // Middleware to inject environment variables
