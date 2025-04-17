@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { handle } from "hono/aws-lambda";
-import { Context, Next } from "hono";
+import { Context } from "hono";
 import apiRouter from "./api/api.routes";
 import { config } from "dotenv";
 import logger from "./utils/logger";
