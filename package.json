@@ -10,7 +10,8 @@
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json}\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:redis": "vitest run test/redis.integration.test.ts"
   },
   "devDependencies": {
     "@hono/node-server": "^1.14.1",
@@ -31,6 +32,7 @@
     "@octokit/rest": "^21.1.1",
     "cors": "^2.8.5",
     "hono": "^4.7.7",
+    "ioredis": "^5.6.1",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "probot": "^13.4.5",
