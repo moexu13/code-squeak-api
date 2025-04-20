@@ -7,9 +7,12 @@ import {
   GitHubNotFoundError,
   GitHubValidationError,
 } from "../utils/githubErrors";
+import { RedisService } from "./redis.service";
 
 export class GitHubService {
   private octokit: Octokit;
+  private readonly CACHE_TTL = 5 * 60; // 5 minutes in seconds
+  private redis: RedisService;
 
   constructor() {
     const token = process.env.GITHUB_TOKEN;
@@ -20,6 +23,11 @@ export class GitHubService {
     this.octokit = new Octokit({
       auth: token,
     });
+    this.redis = RedisService.getInstance();
+  }
+
+  private getCacheKey(method: string, ...args: any[]): string {
+    return `github:${method}:${args.join(":")}`;
   }
 
   private handleGitHubError(error: any, context: string): never {
@@ -45,7 +53,11 @@ export class GitHubService {
     throw new GitHubError(error.message || "Unexpected GitHub API error");
   }
 
-  async listPullRequests(owner: string, repo: string) {
+  async listPullRequests(owner: string, repo: string): Promise<any[]> {
+    const cacheKey = this.getCacheKey("listPullRequests", owner, repo);
+    const cached = await this.redis.get<any[]>(cacheKey);
+    if (cached) return cached;
+
     try {
       const response = await this.octokit.pulls.list({
         owner,
@@ -55,13 +67,36 @@ export class GitHubService {
         direction: "desc",
       });
 
+      await this.redis.set(cacheKey, response.data, this.CACHE_TTL);
       return response.data;
     } catch (error) {
       this.handleGitHubError(error, `listPullRequests(${owner}/${repo})`);
     }
   }
 
-  async getPullRequest(owner: string, repo: string, pullNumber: number) {
+  async getPullRequest(
+    owner: string,
+    repo: string,
+    pullNumber: number
+  ): Promise<{
+    title: string;
+    body: string | null;
+    user: string;
+    state: string;
+    url: string;
+    diff: string;
+  }> {
+    const cacheKey = this.getCacheKey("getPullRequest", owner, repo, pullNumber.toString());
+    const cached = await this.redis.get<{
+      title: string;
+      body: string | null;
+      user: string;
+      state: string;
+      url: string;
+      diff: string;
+    }>(cacheKey);
+    if (cached) return cached;
+
     try {
       const response = await this.octokit.pulls.get({
         owner,
@@ -79,7 +114,7 @@ export class GitHubService {
         },
       })) as unknown as { data: string };
 
-      return {
+      const result = {
         title: response.data.title,
         body: response.data.body,
         user: response.data.user?.login || "unknown",
@@ -87,6 +122,9 @@ export class GitHubService {
         url: response.data.html_url,
         diff: this.filterDiff(diff),
       };
+
+      await this.redis.set(cacheKey, result, this.CACHE_TTL);
+      return result;
     } catch (error) {
       this.handleGitHubError(error, `getPullRequest(${owner}/${repo}#${pullNumber})`);
     }
