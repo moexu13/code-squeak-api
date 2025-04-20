@@ -61,7 +61,14 @@ describe("RedisService", () => {
     });
 
     it("should return parsed JSON for existing key", async () => {
-      const testData = { foo: "bar" };
+      const testData = {
+        title: "Add user authentication",
+        body: "Implement JWT-based authentication system",
+        user: "devuser",
+        state: "open",
+        url: "https://github.com/org/repo/pull/123",
+        diff: "@@ -1,2 +1,3 @@\n+import jwt from 'jsonwebtoken';\n",
+      };
       mockRedis.get.mockResolvedValueOnce(JSON.stringify(testData));
       const result = await redisService.get("test");
       expect(result).toEqual(testData);
@@ -76,13 +83,27 @@ describe("RedisService", () => {
 
   describe("set", () => {
     it("should set value without TTL", async () => {
-      const testData = { foo: "bar" };
+      const testData = {
+        title: "Fix login button styling",
+        body: "Update CSS for better mobile responsiveness",
+        user: "designer",
+        state: "closed",
+        url: "https://github.com/org/repo/pull/124",
+        diff: "@@ -1,2 +1,3 @@\n+.login-button { padding: 10px; }\n",
+      };
       await redisService.set("test", testData);
       expect(mockRedis.set).toHaveBeenCalledWith("test", JSON.stringify(testData));
     });
 
     it("should set value with TTL", async () => {
-      const testData = { foo: "bar" };
+      const testData = {
+        title: "Update dependencies",
+        body: "Bump package versions to latest",
+        user: "maintainer",
+        state: "open",
+        url: "https://github.com/org/repo/pull/125",
+        diff: '@@ -1,2 +1,3 @@\n-  "version": "1.0.0"\n+  "version": "1.1.0"\n',
+      };
       await redisService.set("test", testData, 60);
       expect(mockRedis.setex).toHaveBeenCalledWith("test", 60, JSON.stringify(testData));
     });
