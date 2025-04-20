@@ -3,6 +3,7 @@ import logger from "./logger";
 interface RequiredEnv {
   GITHUB_TOKEN: string;
   ANTHROPIC_API_KEY: string;
+  REDIS_URL: string;
   LOG_LEVEL?: string;
 }
 
