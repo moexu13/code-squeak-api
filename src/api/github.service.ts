@@ -1,59 +1,75 @@
 import { Octokit } from "@octokit/rest";
 import logger from "../utils/logger";
+import {
+  GitHubError,
+  GitHubAuthenticationError,
+  GitHubRateLimitError,
+  GitHubNotFoundError,
+  GitHubValidationError,
+} from "../utils/githubErrors";
 
 export class GitHubService {
   private octokit: Octokit;
 
-  constructor(token: string) {
+  constructor() {
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) {
+      throw new GitHubAuthenticationError();
+    }
+
     this.octokit = new Octokit({
       auth: token,
     });
   }
 
+  private handleGitHubError(error: any, context: string): never {
+    logger.error({ error, context }, "GitHub API error occurred");
+
+    if (error.status === 403 && error.message?.includes("rate limit")) {
+      const retryAfter = error.response?.headers?.["retry-after"];
+      throw new GitHubRateLimitError(retryAfter ? parseInt(retryAfter) : undefined);
+    }
+
+    if (error.status === 401 || error.status === 403) {
+      throw new GitHubAuthenticationError();
+    }
+
+    if (error.status === 404) {
+      throw new GitHubNotFoundError(context);
+    }
+
+    if (error.status === 422) {
+      throw new GitHubValidationError(error.message);
+    }
+
+    throw new GitHubError(error.message || "Unexpected GitHub API error");
+  }
+
   async listPullRequests(owner: string, repo: string) {
     try {
-      const { data: pullRequests } = await this.octokit.pulls.list({
+      const response = await this.octokit.pulls.list({
         owner,
         repo,
-        state: "open",
+        state: "all",
         sort: "updated",
         direction: "desc",
       });
 
-      return pullRequests.map((pr) => ({
-        number: pr.number,
-        title: pr.title,
-        state: pr.state,
-        url: pr.html_url,
-        createdAt: pr.created_at,
-        updatedAt: pr.updated_at,
-        user: pr.user?.login,
-      }));
+      return response.data;
     } catch (error) {
-      logger.error(
-        {
-          error: error instanceof Error ? error.message : String(error),
-          owner,
-          repo,
-          context: "GitHub API Error",
-        },
-        "Failed to fetch pull requests"
-      );
-      throw new Error(
-        `Failed to fetch pull requests: ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.handleGitHubError(error, `listPullRequests(${owner}/${repo})`);
     }
   }
 
   async getPullRequest(owner: string, repo: string, pullNumber: number) {
     try {
-      const { data: pullRequest } = await this.octokit.pulls.get({
+      const response = await this.octokit.pulls.get({
         owner,
         repo,
         pull_number: pullNumber,
       });
 
-      // Get the diff with a limit on size
+      // Get the diff
       const { data: diff } = (await this.octokit.pulls.get({
         owner,
         repo,
@@ -63,34 +79,16 @@ export class GitHubService {
         },
       })) as unknown as { data: string };
 
-      // Filter sensitive information and limit size
-      const filteredDiff = this.filterDiff(diff);
-
       return {
-        number: pullRequest.number,
-        title: pullRequest.title,
-        body: pullRequest.body,
-        state: pullRequest.state,
-        url: pullRequest.html_url,
-        createdAt: pullRequest.created_at,
-        updatedAt: pullRequest.updated_at,
-        user: pullRequest.user?.login,
-        diff: filteredDiff,
+        title: response.data.title,
+        body: response.data.body,
+        user: response.data.user?.login || "unknown",
+        state: response.data.state,
+        url: response.data.html_url,
+        diff: this.filterDiff(diff),
       };
     } catch (error) {
-      logger.error(
-        {
-          error: error instanceof Error ? error.message : String(error),
-          owner,
-          repo,
-          pullNumber,
-          context: "GitHub API Error",
-        },
-        "Failed to fetch pull request"
-      );
-      throw new Error(
-        `Failed to fetch pull request: ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.handleGitHubError(error, `getPullRequest(${owner}/${repo}#${pullNumber})`);
     }
   }
 
