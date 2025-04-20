@@ -122,7 +122,7 @@ apiRouter.get("/:owner/:repoName", validateParams, async (c: Context) => {
     "Fetching pull requests"
   );
 
-  const githubService = new GitHubService(c.get("apiKey"));
+  const githubService = new GitHubService();
   const pullRequests = await githubService.listPullRequests(owner, repoName);
 
   logger.debug(
@@ -150,7 +150,7 @@ apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", validateParams, asyn
     "Analyzing pull request"
   );
 
-  const githubService = new GitHubService(c.get("apiKey"));
+  const githubService = new GitHubService();
   const claudeService = new ClaudeService();
 
   try {
