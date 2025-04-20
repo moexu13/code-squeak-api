@@ -50,7 +50,7 @@ export class GitHubService {
       const response = await this.octokit.pulls.list({
         owner,
         repo,
-        state: "all",
+        state: "open",
         sort: "updated",
         direction: "desc",
       });
