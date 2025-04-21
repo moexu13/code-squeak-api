@@ -8,11 +8,13 @@ import {
   GitHubValidationError,
 } from "../utils/githubErrors";
 import { RedisService } from "./redis.service";
+import { CircuitBreaker } from "../utils/circuitBreaker";
 
 export class GitHubService {
   private octokit: Octokit;
   private readonly CACHE_TTL = 5 * 60; // 5 minutes in seconds
   private redis: RedisService;
+  private circuitBreaker: CircuitBreaker;
 
   constructor() {
     const token = process.env.GITHUB_TOKEN;
@@ -24,6 +26,7 @@ export class GitHubService {
       auth: token,
     });
     this.redis = RedisService.getInstance();
+    this.circuitBreaker = new CircuitBreaker(3, 30000); // 3 failures, 30s reset
   }
 
   private getCacheKey(method: string, ...args: any[]): string {
@@ -58,20 +61,22 @@ export class GitHubService {
     const cached = await this.redis.get<any[]>(cacheKey);
     if (cached) return cached;
 
-    try {
-      const response = await this.octokit.pulls.list({
-        owner,
-        repo,
-        state: "open",
-        sort: "updated",
-        direction: "desc",
-      });
+    return this.circuitBreaker.execute(async () => {
+      try {
+        const response = await this.octokit.pulls.list({
+          owner,
+          repo,
+          state: "open",
+          sort: "updated",
+          direction: "desc",
+        });
 
-      await this.redis.set(cacheKey, response.data, this.CACHE_TTL);
-      return response.data;
-    } catch (error) {
-      this.handleGitHubError(error, `listPullRequests(${owner}/${repo})`);
-    }
+        await this.redis.set(cacheKey, response.data, this.CACHE_TTL);
+        return response.data;
+      } catch (error) {
+        this.handleGitHubError(error, `listPullRequests(${owner}/${repo})`);
+      }
+    });
   }
 
   async getPullRequest(
@@ -97,37 +102,39 @@ export class GitHubService {
     }>(cacheKey);
     if (cached) return cached;
 
-    try {
-      const response = await this.octokit.pulls.get({
-        owner,
-        repo,
-        pull_number: pullNumber,
-      });
+    return this.circuitBreaker.execute(async () => {
+      try {
+        const response = await this.octokit.pulls.get({
+          owner,
+          repo,
+          pull_number: pullNumber,
+        });
 
-      // Get the diff
-      const { data: diff } = (await this.octokit.pulls.get({
-        owner,
-        repo,
-        pull_number: pullNumber,
-        mediaType: {
-          format: "diff",
-        },
-      })) as unknown as { data: string };
+        // Get the diff
+        const { data: diff } = (await this.octokit.pulls.get({
+          owner,
+          repo,
+          pull_number: pullNumber,
+          mediaType: {
+            format: "diff",
+          },
+        })) as unknown as { data: string };
 
-      const result = {
-        title: response.data.title,
-        body: response.data.body,
-        user: response.data.user?.login || "unknown",
-        state: response.data.state,
-        url: response.data.html_url,
-        diff: this.filterDiff(diff),
-      };
+        const result = {
+          title: response.data.title,
+          body: response.data.body,
+          user: response.data.user?.login || "unknown",
+          state: response.data.state,
+          url: response.data.html_url,
+          diff: this.filterDiff(diff),
+        };
 
-      await this.redis.set(cacheKey, result, this.CACHE_TTL);
-      return result;
-    } catch (error) {
-      this.handleGitHubError(error, `getPullRequest(${owner}/${repo}#${pullNumber})`);
-    }
+        await this.redis.set(cacheKey, result, this.CACHE_TTL);
+        return result;
+      } catch (error) {
+        this.handleGitHubError(error, `getPullRequest(${owner}/${repo}#${pullNumber})`);
+      }
+    });
   }
 
   private filterDiff(diff: string): string {
