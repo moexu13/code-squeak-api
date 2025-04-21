@@ -15,6 +15,7 @@ interface ClaudeConfig {
   maxTokens: number;
   temperature: number;
   timeout: number;
+  model: string;
 }
 
 export class ClaudeService {
@@ -42,6 +43,7 @@ export class ClaudeService {
       maxTokens: parseInt(process.env.CLAUDE_MAX_TOKENS || "1000"),
       temperature: parseFloat(process.env.CLAUDE_TEMPERATURE || "0.7"),
       timeout: parseInt(process.env.CLAUDE_TIMEOUT || "30000"),
+      model: process.env.CLAUDE_MODEL || "claude-3-opus-20240229",
     };
 
     this.circuitBreaker = new CircuitBreaker(3, 30000); // 3 failures, 30s reset
@@ -106,7 +108,7 @@ export class ClaudeService {
     return this.circuitBreaker.execute(async () => {
       return this.makeRequest(async () => {
         const response = await this.anthropic.messages.create({
-          model: "claude-3-opus-20240229",
+          model: this.config.model,
           max_tokens: options.maxTokens || this.config.maxTokens,
           temperature: options.temperature || this.config.temperature,
           messages: [{ role: "user", content: message }],
@@ -128,7 +130,7 @@ export class ClaudeService {
     return this.circuitBreaker.execute(async () => {
       return this.makeRequest(async () => {
         const response = await this.anthropic.messages.create({
-          model: "claude-3-opus-20240229",
+          model: this.config.model,
           max_tokens: options.maxTokens || this.config.maxTokens,
           temperature: options.temperature || this.config.temperature,
           messages: [{ role: "user", content: message }],
@@ -181,5 +183,9 @@ export class ClaudeService {
 
     logger.error({ error }, "Unexpected error in Claude service");
     throw new ClaudeRequestError("Unexpected error occurred", 500);
+  }
+
+  getModel(): string {
+    return this.config.model;
   }
 }
