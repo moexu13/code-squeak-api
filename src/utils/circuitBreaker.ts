@@ -8,16 +8,13 @@ export class CircuitBreaker {
   private lastFailureTime: number | null = null;
   private readonly failureThreshold: number;
   private readonly resetTimeout: number;
-  private readonly halfOpenTimeout: number;
 
   constructor(
     failureThreshold = 3,
-    resetTimeout = 10000, // 10 seconds
-    halfOpenTimeout = 5000 // 5 seconds
+    resetTimeout = 10000 // 10 seconds
   ) {
     this.failureThreshold = failureThreshold;
     this.resetTimeout = resetTimeout;
-    this.halfOpenTimeout = halfOpenTimeout;
   }
 
   async execute<T>(fn: () => Promise<T>): Promise<T> {

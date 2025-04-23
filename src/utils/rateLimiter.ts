@@ -77,6 +77,8 @@ export class RateLimiter {
         "Rate limit reached, waiting"
       );
 
+      this.handleError();
+
       // Throw a specific error with details
       throw new RateLimitError(
         "Rate limit exceeded",

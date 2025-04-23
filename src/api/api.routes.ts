@@ -4,7 +4,7 @@ import { GitHubService } from "./github.service";
 import { ClaudeService } from "./claude.service";
 import { Sanitizer } from "../utils/sanitizer";
 import logger from "../utils/logger";
-import { validateOwner, validateRepo, ValidationError } from "../utils/validator";
+import { validatePullRequestParams, ValidationError } from "../utils/validator";
 
 type Variables = {
   apiKey: string;
@@ -15,26 +15,8 @@ const apiRouter = new Hono<{ Variables: Variables }>();
 
 // Validation middleware
 const validateParams = async (c: Context, next: Next) => {
-  const { owner, repoName, pullNumber } = c.req.param();
-
   try {
-    validateOwner(owner);
-    validateRepo(repoName);
-
-    // Validate pull request number if present
-    if (pullNumber) {
-      const pullNum = parseInt(pullNumber, 10);
-      if (isNaN(pullNum) || pullNum <= 0) {
-        return c.json(
-          {
-            error: "Invalid pull request number",
-            details: "Pull request number must be a positive integer",
-          },
-          400
-        );
-      }
-    }
-
+    validatePullRequestParams(c, next);
     await next();
   } catch (error) {
     if (error instanceof ValidationError) {

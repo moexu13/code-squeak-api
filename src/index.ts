@@ -13,8 +13,8 @@ config();
 validateEnv({
   GITHUB_TOKEN: process.env.GITHUB_TOKEN || "",
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "",
-  LOG_LEVEL: process.env.LOG_LEVEL,
   REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
+  LOG_LEVEL: process.env.LOG_LEVEL || "",
 });
 
 type Variables = {
