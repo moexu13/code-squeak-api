@@ -81,7 +81,7 @@ describe("ClaudeService", () => {
       };
       await claudeService.sendMessage("test prompt", options);
       expect(mockClient.messages.create).toHaveBeenCalledWith({
-        model: "claude-3-opus-20240229",
+        model: claudeService.getModel(),
         max_tokens: 100,
         temperature: 0.8,
         messages: [{ role: "user", content: "test prompt" }],
@@ -130,7 +130,7 @@ describe("ClaudeService", () => {
       };
       await claudeService.streamMessage("test prompt", options);
       expect(mockClient.messages.create).toHaveBeenCalledWith({
-        model: "claude-3-opus-20240229",
+        model: claudeService.getModel(),
         max_tokens: 100,
         temperature: 0.8,
         messages: [{ role: "user", content: "test prompt" }],

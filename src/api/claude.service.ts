@@ -9,25 +9,28 @@ import {
   ClaudeTokenLimitError,
   ClaudeTimeoutError,
 } from "../utils/claudeErrors";
+import { CircuitBreaker } from "../utils/circuitBreaker";
 
 interface ClaudeConfig {
   maxTokens: number;
   temperature: number;
   timeout: number;
+  model: string;
 }
 
 export class ClaudeService {
-  private client: Anthropic;
+  private anthropic: Anthropic;
   private rateLimiter: RateLimiter;
   private config: ClaudeConfig;
+  private circuitBreaker: CircuitBreaker;
 
   constructor() {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      throw new Error("Anthropic API key not configured");
+      throw new ClaudeAuthenticationError("Anthropic API key not configured");
     }
 
-    this.client = new Anthropic({
+    this.anthropic = new Anthropic({
       apiKey,
     });
 
@@ -40,7 +43,10 @@ export class ClaudeService {
       maxTokens: parseInt(process.env.CLAUDE_MAX_TOKENS || "1000"),
       temperature: parseFloat(process.env.CLAUDE_TEMPERATURE || "0.7"),
       timeout: parseInt(process.env.CLAUDE_TIMEOUT || "30000"),
+      model: process.env.CLAUDE_MODEL || "claude-3-opus-20240229",
     };
+
+    this.circuitBreaker = new CircuitBreaker(3, 30000); // 3 failures, 30s reset
   }
 
   private async makeRequest<T>(requestFn: () => Promise<T>, context: string): Promise<T> {
@@ -96,68 +102,90 @@ export class ClaudeService {
   }
 
   async sendMessage(
-    prompt: string,
+    message: string,
     options: { maxTokens?: number; temperature?: number } = {}
   ): Promise<string> {
-    const context = "sendMessage";
-    logger.debug({ context }, "Sending message to Claude");
+    return this.circuitBreaker.execute(async () => {
+      return this.makeRequest(async () => {
+        const response = await this.anthropic.messages.create({
+          model: this.config.model,
+          max_tokens: options.maxTokens || this.config.maxTokens,
+          temperature: options.temperature || this.config.temperature,
+          messages: [{ role: "user", content: message }],
+        });
 
-    if (prompt.length > this.config.maxTokens * 4) {
-      throw new ClaudeTokenLimitError("Prompt exceeds maximum token limit", this.config.maxTokens);
-    }
-
-    const requestFn = async () => {
-      const response = await this.client.messages.create({
-        model: "claude-3-opus-20240229",
-        max_tokens: options.maxTokens || this.config.maxTokens,
-        temperature: options.temperature || this.config.temperature,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const content = response.content[0];
-      if (content.type !== "text") {
-        throw new ClaudeRequestError("Unexpected response type from Claude", 500);
-      }
-      return content.text;
-    };
-
-    return this.makeRequest(requestFn, context);
+        const content = response.content[0];
+        if (content.type !== "text") {
+          throw new ClaudeRequestError("Unexpected response type from Claude", 500);
+        }
+        return content.text;
+      }, "sendMessage");
+    });
   }
 
   async streamMessage(
-    prompt: string,
+    message: string,
     options: { maxTokens?: number; temperature?: number } = {}
   ): Promise<AsyncIterable<string>> {
-    const context = "streamMessage";
-    logger.debug({ context }, "Streaming message from Claude");
+    return this.circuitBreaker.execute(async () => {
+      return this.makeRequest(async () => {
+        const response = await this.anthropic.messages.create({
+          model: this.config.model,
+          max_tokens: options.maxTokens || this.config.maxTokens,
+          temperature: options.temperature || this.config.temperature,
+          messages: [{ role: "user", content: message }],
+          stream: true,
+        });
 
-    if (prompt.length > this.config.maxTokens * 4) {
-      throw new ClaudeTokenLimitError("Prompt exceeds maximum token limit", this.config.maxTokens);
-    }
-
-    const requestFn = async () => {
-      const response = await this.client.messages.create({
-        model: "claude-3-opus-20240229",
-        max_tokens: options.maxTokens || this.config.maxTokens,
-        temperature: options.temperature || this.config.temperature,
-        messages: [{ role: "user", content: prompt }],
-        stream: true,
-      });
-
-      return response;
-    };
-
-    const stream = await this.makeRequest(requestFn, context);
-    return this.processStream(stream);
+        return {
+          [Symbol.asyncIterator]() {
+            const iterator = response[Symbol.asyncIterator]();
+            return {
+              async next() {
+                const { value, done } = await iterator.next();
+                if (done) return { done: true, value: undefined };
+                if (value.type === "content_block_delta" && value.delta.type === "text_delta") {
+                  return { done: false, value: value.delta.text };
+                }
+                return { done: false, value: "" };
+              },
+            };
+          },
+        };
+      }, "streamMessage");
+    });
   }
 
-  private async *processStream(
-    stream: AsyncIterable<Anthropic.MessageStreamEvent>
-  ): AsyncIterable<string> {
-    for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        yield event.delta.text;
+  private handleClaudeError(error: unknown): never {
+    if (error instanceof ClaudeError) {
+      throw error;
+    }
+
+    if (error instanceof Error) {
+      if (error.message.includes("rate limit")) {
+        const retryAfter = this.extractRetryAfter(error.message);
+        throw new ClaudeRateLimitError("Rate limit exceeded", retryAfter);
+      }
+
+      if (error.message.includes("authentication")) {
+        throw new ClaudeAuthenticationError("Authentication failed");
+      }
+
+      if (error.message.includes("token limit")) {
+        const maxTokens = this.extractMaxTokens(error.message);
+        throw new ClaudeTokenLimitError("Token limit exceeded", maxTokens);
+      }
+
+      if (error.message.includes("timeout")) {
+        throw new ClaudeTimeoutError("Request timed out");
       }
     }
+
+    logger.error({ error }, "Unexpected error in Claude service");
+    throw new ClaudeRequestError("Unexpected error occurred", 500);
+  }
+
+  getModel(): string {
+    return this.config.model;
   }
 }
