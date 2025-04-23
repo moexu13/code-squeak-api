@@ -37,14 +37,25 @@ export const validateRepo = (repo: string): void => {
 
 export const validatePullRequestParams = async (c: Context, next: Next) => {
   try {
-    const { owner, repo } = c.req.param();
+    const { owner, repo, pullNumber } = c.req.param();
     validateOwner(owner);
     validateRepo(repo);
+    if (pullNumber) {
+      validatePullRequestNumber(pullNumber);
+    }
+
     await next();
   } catch (error) {
     if (error instanceof ValidationError) {
       return c.json({ error: error.message }, 400);
     }
     throw error;
+  }
+};
+
+export const validatePullRequestNumber = (pullNumber: string): void => {
+  const pullNum = parseInt(pullNumber, 10);
+  if (isNaN(pullNum) || pullNum <= 0) {
+    throw new ValidationError("Invalid pull request number");
   }
 };
