@@ -90,6 +90,9 @@ describe("GitHubService", () => {
   describe("getPullRequest", () => {
     it("should handle authentication errors", async () => {
       const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
+      // Mock the first call to get the PR data
+      octokitInstance.pulls.get.mockRejectedValueOnce({ status: 401 });
+      // Mock the second call to get the diff (which won't be reached due to the error)
       octokitInstance.pulls.get.mockRejectedValueOnce({ status: 401 });
 
       await expect(githubService.getPullRequest("owner", "repo", 1)).rejects.toThrow(
