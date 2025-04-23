@@ -22,10 +22,7 @@ export class Sanitizer {
     // Remove any potential special characters that might cause issues
     sanitized = sanitized.replace(/[^\w\s.,?-]/g, " ");
 
-    // First pass: replace 3+ spaces with double space
-    sanitized = sanitized.replace(/\s{3,}/g, "  ");
-
-    // Second pass: replace remaining multiple spaces with single space
+    // Replace all whitespace sequences with a single space
     sanitized = sanitized.replace(/\s+/g, " ");
 
     // Trim whitespace and limit length
@@ -89,10 +86,7 @@ export class Sanitizer {
     // Remove any potential special characters that might cause issues
     sanitized = sanitized.replace(/[^\w\s.,?-]/g, " ");
 
-    // First pass: replace 3+ spaces with double space
-    sanitized = sanitized.replace(/\s{3,}/g, "  ");
-
-    // Second pass: replace remaining multiple spaces with single space
+    // Replace all whitespace sequences with a single space
     sanitized = sanitized.replace(/\s+/g, " ");
 
     // Trim whitespace
