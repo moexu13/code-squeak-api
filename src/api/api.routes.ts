@@ -15,15 +15,15 @@ const apiRouter = new Hono<{ Variables: Variables }>();
 
 // Validation middleware
 const validateParams = async (c: Context, next: Next) => {
+  const start = Date.now();
   try {
-    validatePullRequestParams(c, next);
-    await next();
-  } catch (error) {
-    if (error instanceof ValidationError) {
-      logger.warn({ error: error.message, context: "API Validation" }, "Validation error");
-      return c.json({ error: error.message }, 400);
-    }
-    throw error;
+    return await validatePullRequestParams(c, next);
+  } catch (error: any) {
+    console.error(`Error validating params: ${error}`);
+    return c.json({ error: "Invalid parameters", details: error.message }, 400);
+  } finally {
+    const end = Date.now();
+    console.log(`validateParams middleware executed in ${end - start}ms`);
   }
 };
 
