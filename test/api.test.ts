@@ -12,20 +12,25 @@ process.env.LOG_LEVEL = "info";
 // Make sure token is long enough to pass validation
 process.env.GITHUB_TOKEN = "ghp_1234567890123456789012345678901234567890";
 
-console.log("Test environment setup:", {
-  hasToken: !!process.env.GITHUB_TOKEN,
-  tokenLength: process.env.GITHUB_TOKEN?.length,
-  redisUrl: process.env.REDIS_URL,
-  hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
-  logLevel: process.env.LOG_LEVEL,
-});
+// Import logger early so we can use it before other imports
+import logger from "../src/utils/logger";
+
+logger.info(
+  {
+    hasToken: !!process.env.GITHUB_TOKEN,
+    tokenLength: process.env.GITHUB_TOKEN?.length,
+    redisUrl: process.env.REDIS_URL,
+    hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
+    logLevel: process.env.LOG_LEVEL,
+    context: "Test Setup",
+  },
+  "Test environment setup"
+);
 
 import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
-import apiRouter from "../src/api/api.routes";
-import logger from "../src/utils/logger";
 import { Context, Next } from "hono";
 
 // Mock the validator to handle our specific test routes correctly
@@ -122,11 +127,16 @@ describe("API Endpoints", () => {
   it("GET /v1/api/octocat/Hello-World should return pull requests", async () => {
     server = serve(testApp);
     const response = await request(server).get("/v1/api/octocat/Hello-World");
-    console.log("API Response:", {
-      status: response.status,
-      body: response.body,
-      error: response.error,
-    });
+
+    logger.debug(
+      {
+        status: response.status,
+        body: response.body,
+        error: response.error,
+        context: "Test API Response",
+      },
+      "API Response received"
+    );
 
     // If the validation is working properly
     expect(response.status).toBe(200);

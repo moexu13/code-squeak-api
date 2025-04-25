@@ -19,11 +19,23 @@ const validateParams = async (c: Context, next: Next) => {
   try {
     return await validatePullRequestParams(c, next);
   } catch (error: any) {
-    console.error(`Error validating params: ${error}`);
+    logger.error(
+      {
+        error: error.message,
+        context: "Validation Middleware",
+      },
+      "Error validating params"
+    );
     return c.json({ error: "Invalid parameters", details: error.message }, 400);
   } finally {
     const end = Date.now();
-    console.log(`validateParams middleware executed in ${end - start}ms`);
+    logger.debug(
+      {
+        executionTime: `${end - start}ms`,
+        context: "Validation Middleware",
+      },
+      `validateParams middleware executed in ${end - start}ms`
+    );
   }
 };
 
