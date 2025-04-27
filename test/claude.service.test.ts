@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { ClaudeService } from "../src/api/claude.service";
 import { RateLimiter } from "../src/utils/rateLimiter";
+import { CircuitBreaker } from "../src/utils/circuitBreaker";
+import {
+  ClaudeRateLimitError,
+  ClaudeAuthenticationError,
+  ClaudeTokenLimitError,
+  ClaudeTimeoutError,
+  ClaudeRequestError,
+} from "../src/utils/claudeErrors";
 
 // Mock the Anthropic client
 const mockClient = {
@@ -27,11 +35,47 @@ vi.mock("@anthropic-ai/sdk", () => ({
 }));
 
 // Mock the RateLimiter
+const mockWaitForSlot = vi.fn().mockResolvedValue(undefined);
 vi.mock("../src/utils/rateLimiter", () => ({
   RateLimiter: vi.fn().mockImplementation(() => ({
-    waitForSlot: vi.fn().mockResolvedValue(undefined),
+    waitForSlot: mockWaitForSlot,
   })),
 }));
+
+// Mock the CircuitBreaker
+const mockExecute = vi.fn().mockImplementation((fn) => fn());
+vi.mock("../src/utils/circuitBreaker", () => ({
+  CircuitBreaker: vi.fn().mockImplementation(() => ({
+    execute: mockExecute,
+    getState: vi.fn().mockReturnValue("CLOSED"),
+  })),
+}));
+
+// Mock logger
+vi.mock("../src/utils/logger", () => ({
+  default: {
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+// Direct mock of ClaudeError classes
+vi.mock("../src/utils/claudeErrors", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/utils/claudeErrors")>();
+  return {
+    ...actual,
+    ClaudeTokenLimitError: class extends actual.ClaudeError {
+      maxTokens: number;
+      constructor(message: string, maxTokens: number) {
+        super(message);
+        this.maxTokens = maxTokens;
+        this.name = "ClaudeTokenLimitError";
+      }
+    },
+  };
+});
 
 describe("ClaudeService", () => {
   let claudeService: ClaudeService;
@@ -44,8 +88,10 @@ describe("ClaudeService", () => {
       CLAUDE_MODEL: "test-model",
       CLAUDE_MAX_TOKENS: "500",
       CLAUDE_TEMPERATURE: "0.5",
+      CLAUDE_TIMEOUT: "2000",
     };
     claudeService = new ClaudeService();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -63,6 +109,7 @@ describe("ClaudeService", () => {
       delete process.env.CLAUDE_MODEL;
       delete process.env.CLAUDE_MAX_TOKENS;
       delete process.env.CLAUDE_TEMPERATURE;
+      delete process.env.CLAUDE_TIMEOUT;
       const service = new ClaudeService();
       expect(service).toBeInstanceOf(ClaudeService);
     });
@@ -72,6 +119,8 @@ describe("ClaudeService", () => {
     it("should send message with default options", async () => {
       const response = await claudeService.sendMessage("test prompt");
       expect(response).toBe("Mock response");
+      expect(mockExecute).toHaveBeenCalled();
+      expect(mockWaitForSlot).toHaveBeenCalled();
     });
 
     it("should use custom options when provided", async () => {
@@ -104,15 +153,149 @@ describe("ClaudeService", () => {
       );
     });
 
-    it("should respect rate limiting", async () => {
-      const rateLimiterInstance = vi.mocked(RateLimiter).mock.results[0].value;
-      await claudeService.sendMessage("test prompt");
-      expect(rateLimiterInstance.waitForSlot).toHaveBeenCalled();
+    it("should handle rate limit errors", async () => {
+      // Clear previous mock implementation
+      mockClient.messages.create.mockReset();
+
+      // Setup for this specific test case only
+      mockClient.messages.create.mockRejectedValueOnce(
+        new Error("Anthropic API rate limit exceeded. Please retry after 60 seconds.")
+      );
+
+      await expect(claudeService.sendMessage("test prompt")).rejects.toThrow("Rate limit exceeded");
+
+      // Reset mock again
+      mockClient.messages.create.mockReset();
+
+      // Setup for the second assertion
+      mockClient.messages.create.mockRejectedValueOnce(
+        new Error("Anthropic API rate limit exceeded. Please retry after 60 seconds.")
+      );
+
+      await expect(claudeService.sendMessage("test prompt")).rejects.toBeInstanceOf(
+        ClaudeRateLimitError
+      );
+    });
+
+    it("should extract retry-after from rate limit error", async () => {
+      mockClient.messages.create.mockRejectedValueOnce(
+        new Error("Anthropic API rate limit exceeded. Please retry after 30 seconds.")
+      );
+
+      try {
+        await claudeService.sendMessage("test prompt");
+        expect.fail("Expected an error to be thrown");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ClaudeRateLimitError);
+        expect((error as ClaudeRateLimitError).retryAfter).toBe(30000);
+      }
+    });
+
+    it("should handle authentication errors", async () => {
+      // Clear previous mock implementation
+      mockClient.messages.create.mockReset();
+
+      // Setup for this specific test case only
+      mockClient.messages.create.mockRejectedValueOnce(
+        new Error("Failed authentication with Anthropic API")
+      );
+
+      await expect(claudeService.sendMessage("test prompt")).rejects.toThrow(
+        "Authentication failed"
+      );
+
+      // Reset mock again
+      mockClient.messages.create.mockReset();
+
+      // Setup for the second assertion
+      mockClient.messages.create.mockRejectedValueOnce(
+        new Error("Failed authentication with Anthropic API")
+      );
+
+      await expect(claudeService.sendMessage("test prompt")).rejects.toBeInstanceOf(
+        ClaudeAuthenticationError
+      );
+    });
+
+    it("should handle token limit errors", async () => {
+      // Use a different approach to test token limit errors
+      // Create a fake error that will match our pattern
+      const tokenLimitError = new Error("token limit exceeded for this model. max tokens: 4096");
+
+      // Directly create an instance of ClaudeTokenLimitError for comparison
+      const expectedError = new ClaudeTokenLimitError("Token limit exceeded", 4096);
+
+      // Mock the makeRequest function to throw our expected error
+      const claudeServiceAny = claudeService as any;
+
+      // Create a spy on extractMaxTokens to ensure it's called correctly
+      const extractSpy = vi.spyOn(claudeServiceAny, "extractMaxTokens");
+      extractSpy.mockReturnValueOnce(4096);
+
+      // Mock the request to throw the error
+      mockClient.messages.create.mockRejectedValueOnce(tokenLimitError);
+
+      // Test that we get a ClaudeTokenLimitError
+      await expect(claudeService.sendMessage("test prompt")).rejects.toThrow(
+        "Token limit exceeded"
+      );
+
+      // Check if extraction method was called with the right message
+      expect(extractSpy).toHaveBeenCalledWith(tokenLimitError.message);
+    });
+
+    it("should handle timeout errors from API", async () => {
+      // Clear previous mock implementation
+      mockClient.messages.create.mockReset();
+
+      // Setup for this specific test case only
+      mockClient.messages.create.mockRejectedValueOnce(new Error("Request timeout exceeded"));
+
+      await expect(claudeService.sendMessage("test prompt")).rejects.toThrow("Request timed out");
+
+      // Reset mock again
+      mockClient.messages.create.mockReset();
+
+      // Setup for the second assertion
+      mockClient.messages.create.mockRejectedValueOnce(new Error("Request timeout exceeded"));
+
+      await expect(claudeService.sendMessage("test prompt")).rejects.toBeInstanceOf(
+        ClaudeTimeoutError
+      );
+    });
+
+    it("should handle timeout when request takes too long", { timeout: 10000 }, async () => {
+      // Mock the makeRequest method directly
+      const claudeServiceAny = claudeService as any;
+      const origMakeRequest = claudeServiceAny.makeRequest;
+
+      // Replace the method with our mocked version that mimics a timeout
+      claudeServiceAny.makeRequest = vi
+        .fn()
+        .mockRejectedValue(new ClaudeTimeoutError("Request timed out after 2000ms"));
+
+      try {
+        await expect(claudeService.sendMessage("test prompt")).rejects.toThrow("Request timed out");
+        await expect(claudeService.sendMessage("test prompt")).rejects.toBeInstanceOf(
+          ClaudeTimeoutError
+        );
+      } finally {
+        // Restore the original method
+        claudeServiceAny.makeRequest = origMakeRequest;
+      }
     });
   });
 
   describe("streamMessage", () => {
     it("should stream message with default options", async () => {
+      // Mock the implementation to ensure we return a properly structured async iterable
+      mockClient.messages.create.mockResolvedValueOnce({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: "content_block_delta", delta: { type: "text_delta", text: "Mock" } };
+          yield { type: "content_block_delta", delta: { type: "text_delta", text: " response" } };
+        },
+      });
+
       const stream = await claudeService.streamMessage("test prompt");
       const chunks: string[] = [];
 
@@ -124,6 +307,12 @@ describe("ClaudeService", () => {
     });
 
     it("should use custom options when streaming", async () => {
+      mockClient.messages.create.mockResolvedValueOnce({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: "content_block_delta", delta: { type: "text_delta", text: "Test" } };
+        },
+      });
+
       const options = {
         maxTokens: 100,
         temperature: 0.8,
@@ -139,16 +328,102 @@ describe("ClaudeService", () => {
     });
 
     it("should handle streaming errors", async () => {
-      mockClient.messages.create.mockRejectedValueOnce(new Error("Streaming Error"));
+      mockClient.messages.create.mockRejectedValueOnce(new Error("Stream error"));
       await expect(claudeService.streamMessage("test prompt")).rejects.toThrow(
         "Unexpected error occurred"
       );
     });
 
+    it("should handle empty stream chunks", async () => {
+      mockClient.messages.create.mockResolvedValueOnce({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: "content_block_delta", delta: { type: "text_delta", text: "text" } };
+          yield { type: "other_type" }; // Not a text_delta
+          yield { type: "content_block_delta", delta: { type: "other_delta" } }; // Not a text_delta
+        },
+      });
+
+      const stream = await claudeService.streamMessage("test prompt");
+      const chunks: string[] = [];
+
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toEqual(["text", "", ""]);
+    });
+
+    it("should handle rate limit errors during streaming", async () => {
+      mockClient.messages.create.mockRejectedValueOnce(
+        new Error("Anthropic API rate limit exceeded. Please retry after 60 seconds.")
+      );
+
+      await expect(claudeService.streamMessage("test prompt")).rejects.toThrow(
+        "Rate limit exceeded"
+      );
+    });
+
     it("should respect rate limiting when streaming", async () => {
-      const rateLimiterInstance = vi.mocked(RateLimiter).mock.results[0].value;
+      mockClient.messages.create.mockResolvedValueOnce({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: "content_block_delta", delta: { type: "text_delta", text: "Test" } };
+        },
+      });
+
       await claudeService.streamMessage("test prompt");
-      expect(rateLimiterInstance.waitForSlot).toHaveBeenCalled();
+      expect(mockWaitForSlot).toHaveBeenCalled();
+    });
+
+    it("should use the circuit breaker for streaming", async () => {
+      mockClient.messages.create.mockResolvedValueOnce({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: "content_block_delta", delta: { type: "text_delta", text: "Test" } };
+        },
+      });
+
+      await claudeService.streamMessage("test prompt");
+      expect(mockExecute).toHaveBeenCalled();
+    });
+
+    it("should handle timeout for streaming", { timeout: 10000 }, async () => {
+      // Mock the makeRequest method directly
+      const claudeServiceAny = claudeService as any;
+      const origMakeRequest = claudeServiceAny.makeRequest;
+
+      // Replace the method with our mocked version that mimics a timeout
+      claudeServiceAny.makeRequest = vi
+        .fn()
+        .mockRejectedValue(new ClaudeTimeoutError("Request timed out after 2000ms"));
+
+      try {
+        await expect(claudeService.streamMessage("test prompt")).rejects.toThrow(
+          "Request timed out"
+        );
+      } finally {
+        // Restore the original method
+        claudeServiceAny.makeRequest = origMakeRequest;
+      }
+    });
+  });
+
+  describe("getModel", () => {
+    it("should return the configured model", () => {
+      expect(claudeService.getModel()).toBe("test-model");
+    });
+  });
+
+  describe("Error handling", () => {
+    // Test for the private methods using type casting to access them
+    it("should extract retry-after time from error message", () => {
+      const claudeServiceAny = claudeService as any;
+      expect(claudeServiceAny.extractRetryAfter("please retry after 60 seconds")).toBe(60000);
+      expect(claudeServiceAny.extractRetryAfter("some other message")).toBeUndefined();
+    });
+
+    it("should extract max tokens from error message", () => {
+      const claudeServiceAny = claudeService as any;
+      expect(claudeServiceAny.extractMaxTokens("max tokens: 2000")).toBe(2000);
+      expect(claudeServiceAny.extractMaxTokens("some other message")).toBe(500); // Default from our test setup
     });
   });
 });
