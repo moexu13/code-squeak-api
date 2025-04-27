@@ -160,4 +160,80 @@ describe("GitHubService", () => {
       });
     });
   });
+
+  describe("createPullRequestComment", () => {
+    // Update our vi.mock to include issues.createComment
+    beforeEach(() => {
+      vi.resetAllMocks();
+
+      // Set up GitHub token for each test
+      process.env.GITHUB_TOKEN = "test-token";
+      githubService = new GitHubService();
+
+      // Make sure the mocked Octokit instance has the issues.createComment method
+      const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
+      if (!octokitInstance.issues) {
+        octokitInstance.issues = { createComment: vi.fn() };
+      } else if (!octokitInstance.issues.createComment) {
+        octokitInstance.issues.createComment = vi.fn();
+      }
+    });
+
+    it("should create a pull request comment successfully", async () => {
+      const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
+      octokitInstance.issues.createComment.mockResolvedValueOnce({ data: {} });
+
+      await githubService.createPullRequestComment("owner", "repo", 1, "Test comment");
+
+      expect(octokitInstance.issues.createComment).toHaveBeenCalledWith({
+        owner: "owner",
+        repo: "repo",
+        issue_number: 1,
+        body: "Test comment",
+      });
+    });
+
+    it("should handle authentication errors", async () => {
+      const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
+      octokitInstance.issues.createComment.mockRejectedValueOnce({ status: 401 });
+
+      await expect(
+        githubService.createPullRequestComment("owner", "repo", 1, "Test comment")
+      ).rejects.toThrow(GitHubAuthenticationError);
+    });
+
+    it("should handle rate limit errors", async () => {
+      const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
+      octokitInstance.issues.createComment.mockRejectedValueOnce({
+        status: 403,
+        message: "rate limit exceeded",
+        response: { headers: { "retry-after": "60" } },
+      });
+
+      await expect(
+        githubService.createPullRequestComment("owner", "repo", 1, "Test comment")
+      ).rejects.toThrow(GitHubRateLimitError);
+    });
+
+    it("should handle not found errors", async () => {
+      const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
+      octokitInstance.issues.createComment.mockRejectedValueOnce({ status: 404 });
+
+      await expect(
+        githubService.createPullRequestComment("owner", "repo", 1, "Test comment")
+      ).rejects.toThrow(GitHubNotFoundError);
+    });
+
+    it("should handle validation errors", async () => {
+      const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
+      octokitInstance.issues.createComment.mockRejectedValueOnce({
+        status: 422,
+        message: "Invalid request",
+      });
+
+      await expect(
+        githubService.createPullRequestComment("owner", "repo", 1, "Test comment")
+      ).rejects.toThrow(GitHubValidationError);
+    });
+  });
 });

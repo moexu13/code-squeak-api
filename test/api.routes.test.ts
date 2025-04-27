@@ -431,4 +431,232 @@ describe("API Routes", () => {
       expect(body.error).toBe("Repository parameter is required");
     });
   });
+
+  describe("POST /:owner/:repoName/pull/:pullNumber/analyze-and-comment", () => {
+    it("should analyze PR and post comment when postComment is true", async () => {
+      // Mock the GitHub PR data
+      const mockPullRequest = {
+        title: "Test PR",
+        body: "Test PR Description",
+        user: "testuser",
+        state: "open",
+        url: "https://github.com/testowner/testrepo/pull/1",
+        diff: "diff --git a/test.txt b/test.txt\n--- a/test.txt\n+++ b/test.txt\n@@ -1 +1 @@\n-test\n+updated test",
+      };
+
+      const mockSanitizedPR = {
+        ...mockPullRequest,
+      };
+
+      const mockAnalysis = "This PR looks good. It updates test.txt with a better message.";
+
+      // Setup the mocks
+      const getPullRequestMock = vi.fn().mockResolvedValue(mockPullRequest);
+      const createPullRequestCommentMock = vi.fn().mockResolvedValue(undefined);
+      const sendMessageMock = vi.fn().mockResolvedValue(mockAnalysis);
+
+      (GitHubService as any).mockImplementation(() => ({
+        listPullRequests: vi.fn(),
+        getPullRequest: getPullRequestMock,
+        createPullRequestComment: createPullRequestCommentMock,
+      }));
+
+      (ClaudeService as any).mockImplementation(() => ({
+        sendMessage: sendMessageMock,
+        streamMessage: vi.fn(),
+      }));
+
+      (Sanitizer.sanitizePullRequestData as any).mockReturnValue(mockSanitizedPR);
+      (Sanitizer.sanitizePrompt as any).mockReturnValue("Test prompt");
+
+      const requestBody = {
+        postComment: true,
+        maxTokens: 1200,
+        temperature: 0.5,
+      };
+
+      const res = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.analysis).toBe(mockAnalysis);
+      expect(body.commentPosted).toBe(true);
+
+      // Verify the comment was posted
+      expect(createPullRequestCommentMock).toHaveBeenCalledWith(
+        "testowner",
+        "testrepo",
+        1,
+        `## AI Pull Request Review\n\n${mockAnalysis}`
+      );
+
+      // Verify Claude options were passed correctly
+      expect(sendMessageMock).toHaveBeenCalledWith("Test prompt", {
+        maxTokens: 1200,
+        temperature: 0.5,
+      });
+    });
+
+    it("should analyze PR without posting comment when postComment is false", async () => {
+      // Mock the GitHub PR data
+      const mockPullRequest = {
+        title: "Test PR",
+        body: "Test PR Description",
+        user: "testuser",
+        state: "open",
+        url: "https://github.com/testowner/testrepo/pull/1",
+        diff: "diff --git a/test.txt b/test.txt\n--- a/test.txt\n+++ b/test.txt\n@@ -1 +1 @@\n-test\n+updated test",
+      };
+
+      const mockSanitizedPR = {
+        ...mockPullRequest,
+      };
+
+      const mockAnalysis = "This PR looks good. It updates test.txt with a better message.";
+
+      // Setup the mocks
+      const getPullRequestMock = vi.fn().mockResolvedValue(mockPullRequest);
+      const createPullRequestCommentMock = vi.fn().mockResolvedValue(undefined);
+      const sendMessageMock = vi.fn().mockResolvedValue(mockAnalysis);
+
+      (GitHubService as any).mockImplementation(() => ({
+        listPullRequests: vi.fn(),
+        getPullRequest: getPullRequestMock,
+        createPullRequestComment: createPullRequestCommentMock,
+      }));
+
+      (ClaudeService as any).mockImplementation(() => ({
+        sendMessage: sendMessageMock,
+        streamMessage: vi.fn(),
+      }));
+
+      (Sanitizer.sanitizePullRequestData as any).mockReturnValue(mockSanitizedPR);
+      (Sanitizer.sanitizePrompt as any).mockReturnValue("Test prompt");
+
+      const requestBody = {
+        postComment: false,
+      };
+
+      const res = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.analysis).toBe(mockAnalysis);
+      expect(body.commentPosted).toBe(false);
+
+      // Verify the comment was NOT posted
+      expect(createPullRequestCommentMock).not.toHaveBeenCalled();
+    });
+
+    it("should use custom prompt when provided", async () => {
+      // Mock the GitHub PR data
+      const mockPullRequest = {
+        title: "Test PR",
+        body: "Test PR Description",
+        user: "testuser",
+        state: "open",
+        url: "https://github.com/testowner/testrepo/pull/1",
+        diff: "diff --git a/test.txt b/test.txt\n--- a/test.txt\n+++ b/test.txt\n@@ -1 +1 @@\n-test\n+updated test",
+      };
+
+      const mockSanitizedPR = {
+        ...mockPullRequest,
+      };
+
+      const mockAnalysis = "This PR looks good. It updates test.txt with a better message.";
+      const customPrompt = "Please review this PR with focus on security issues:";
+
+      // Setup the mocks
+      const getPullRequestMock = vi.fn().mockResolvedValue(mockPullRequest);
+      const sendMessageMock = vi.fn().mockResolvedValue(mockAnalysis);
+
+      (GitHubService as any).mockImplementation(() => ({
+        listPullRequests: vi.fn(),
+        getPullRequest: getPullRequestMock,
+        createPullRequestComment: vi.fn().mockResolvedValue(undefined),
+      }));
+
+      (ClaudeService as any).mockImplementation(() => ({
+        sendMessage: sendMessageMock,
+        streamMessage: vi.fn(),
+      }));
+
+      (Sanitizer.sanitizePullRequestData as any).mockReturnValue(mockSanitizedPR);
+      (Sanitizer.sanitizePrompt as any).mockImplementation(
+        (prompt: string) => `Sanitized: ${prompt}`
+      );
+
+      const requestBody = {
+        prompt: customPrompt,
+      };
+
+      const res = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      expect(res.status).toBe(200);
+
+      // Verify the custom prompt was used
+      expect(Sanitizer.sanitizePrompt).toHaveBeenCalledWith(customPrompt);
+      expect(sendMessageMock).toHaveBeenCalledWith(
+        `Sanitized: ${customPrompt}`,
+        expect.any(Object)
+      );
+    });
+
+    it("should handle GitHub API errors", async () => {
+      const getPullRequestMock = vi.fn().mockRejectedValue(new Error("GitHub API Error"));
+
+      (GitHubService as any).mockImplementation(() => ({
+        listPullRequests: vi.fn(),
+        getPullRequest: getPullRequestMock,
+        createPullRequestComment: vi.fn(),
+      }));
+
+      const res = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(500);
+    });
+
+    it("should validate parameters", async () => {
+      // Modify the mock for this test
+      validator.validatePullRequestParams.mockImplementationOnce((c, next) => {
+        return c.json({ error: "Invalid pull request number" }, 400);
+      });
+
+      const res = await app.request("/testowner/testrepo/pull/invalid/analyze-and-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Invalid pull request number");
+    });
+  });
 });

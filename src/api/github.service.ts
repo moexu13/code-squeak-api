@@ -159,4 +159,26 @@ export class GitHubService {
 
     return diff;
   }
+
+  async createPullRequestComment(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    body: string
+  ): Promise<void> {
+    return this.circuitBreaker.execute(async () => {
+      try {
+        await this.octokit.issues.createComment({
+          owner,
+          repo,
+          issue_number: pullNumber, // Pull requests are treated as issues in the GitHub API
+          body,
+        });
+
+        logger.info({ owner, repo, pullNumber }, "Successfully created comment on pull request");
+      } catch (error) {
+        this.handleGitHubError(error, `createPullRequestComment(${owner}/${repo}#${pullNumber})`);
+      }
+    });
+  }
 }
