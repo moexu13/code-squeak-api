@@ -210,4 +210,105 @@ Keep the analysis focused on the technical aspects of the changes.`);
   }
 });
 
+apiRouter.post(
+  "/:owner/:repoName/pull/:pullNumber/analyze-and-comment",
+  validateParams,
+  async (c: Context) => {
+    const { owner, repoName, pullNumber } = c.req.param();
+    logger.info(
+      {
+        owner,
+        repoName,
+        pullNumber,
+        context: "API Routes",
+      },
+      "Analyzing pull request and posting comment"
+    );
+
+    const githubService = new GitHubService();
+    const claudeService = new ClaudeService();
+
+    try {
+      // Parse request body - contains custom options or parameters
+      const body = await c.req.json();
+      const customPrompt = body.prompt;
+      const shouldComment = body.postComment !== false; // Default to true if not specified
+      const analysisOptions = {
+        maxTokens: body.maxTokens || 1000,
+        temperature: body.temperature || 0.7,
+      };
+
+      // Get the pull request data
+      const pullRequest = await githubService.getPullRequest(owner, repoName, parseInt(pullNumber));
+      const sanitizedData = Sanitizer.sanitizePullRequestData(pullRequest);
+
+      // Use custom prompt if provided, otherwise use default
+      const analysisPrompt = customPrompt
+        ? Sanitizer.sanitizePrompt(customPrompt)
+        : Sanitizer.sanitizePrompt(`You are a senior software engineer reviewing a pull request. Please analyze the following changes and provide focused feedback:
+
+Title: ${sanitizedData.title}
+Description: ${sanitizedData.body || "No description provided"}
+Author: ${sanitizedData.user}
+State: ${sanitizedData.state}
+URL: ${sanitizedData.url}
+
+Changes:
+${sanitizedData.diff}
+
+Please provide a concise analysis focusing on:
+1. Code quality and maintainability
+2. Potential bugs or edge cases
+3. Security implications
+4. Performance considerations
+
+Keep the analysis focused on the technical aspects of the changes.`);
+
+      // Get analysis from Claude
+      const analysis = await claudeService.sendMessage(analysisPrompt, analysisOptions);
+
+      // Post comment to the PR if requested
+      if (shouldComment) {
+        await githubService.createPullRequestComment(
+          owner,
+          repoName,
+          parseInt(pullNumber),
+          `## AI Pull Request Review\n\n${analysis}`
+        );
+
+        logger.info(
+          {
+            owner,
+            repoName,
+            pullNumber,
+            context: "API Routes",
+          },
+          "Successfully posted review comment to pull request"
+        );
+      }
+
+      return c.json({
+        pullRequest: {
+          ...sanitizedData,
+          diff: undefined, // Remove the diff from the response
+        },
+        analysis,
+        commentPosted: shouldComment,
+      });
+    } catch (error) {
+      logger.error(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          owner,
+          repoName,
+          pullNumber,
+          context: "API Routes",
+        },
+        "Failed to analyze pull request and post comment"
+      );
+      throw error;
+    }
+  }
+);
+
 export default apiRouter;
