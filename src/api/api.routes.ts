@@ -4,7 +4,7 @@ import { GitHubService } from "./github.service";
 import { ClaudeService } from "./claude.service";
 import { Sanitizer } from "../utils/sanitizer";
 import logger from "../utils/logger";
-import { validatePullRequestParams, ValidationError } from "../utils/validator";
+import { validatePullRequestParams } from "../utils/validator";
 
 type Variables = {
   apiKey: string;
@@ -12,6 +12,29 @@ type Variables = {
 };
 
 const apiRouter = new Hono<{ Variables: Variables }>();
+
+const DEFAULT_REVIEW_PROMPT = `You are a senior software engineer reviewing a pull request. Please analyze the following changes and provide focused feedback:
+
+Title: {title}
+Description: {description}
+Author: {author}
+State: {state}
+URL: {url}
+
+Changes:
+{diff}
+
+Please provide a concise analysis focusing on:
+1. Code quality and maintainability
+2. Idiomatic code and adherence to best practices
+3. Potential bugs or edge cases
+4. Security implications
+5. Performance considerations
+
+Keep the analysis focused on the technical aspects of the changes. Suggest improvements 
+and explain your reasoning for each suggestion.`;
+
+const COMMENT_HEADER = "🐀 CodeSqueak AI Review";
 
 // Validation middleware
 const validateParams = async (c: Context, next: Next) => {
@@ -245,24 +268,14 @@ apiRouter.post(
       // Use custom prompt if provided, otherwise use default
       const analysisPrompt = customPrompt
         ? Sanitizer.sanitizePrompt(customPrompt)
-        : Sanitizer.sanitizePrompt(`You are a senior software engineer reviewing a pull request. Please analyze the following changes and provide focused feedback:
-
-Title: ${sanitizedData.title}
-Description: ${sanitizedData.body || "No description provided"}
-Author: ${sanitizedData.user}
-State: ${sanitizedData.state}
-URL: ${sanitizedData.url}
-
-Changes:
-${sanitizedData.diff}
-
-Please provide a concise analysis focusing on:
-1. Code quality and maintainability
-2. Potential bugs or edge cases
-3. Security implications
-4. Performance considerations
-
-Keep the analysis focused on the technical aspects of the changes.`);
+        : Sanitizer.sanitizePrompt(
+            DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedData.title)
+              .replace("{description}", sanitizedData.body || "No description provided")
+              .replace("{author}", sanitizedData.user)
+              .replace("{state}", sanitizedData.state)
+              .replace("{url}", sanitizedData.url)
+              .replace("{diff}", sanitizedData.diff)
+          );
 
       // Get analysis from Claude
       const analysis = await claudeService.sendMessage(analysisPrompt, analysisOptions);
@@ -273,7 +286,7 @@ Keep the analysis focused on the technical aspects of the changes.`);
           owner,
           repoName,
           parseInt(pullNumber),
-          `## AI Pull Request Review\n\n${analysis}`
+          `${COMMENT_HEADER}\n\n${analysis}`
         );
 
         logger.info(
