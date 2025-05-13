@@ -26,6 +26,67 @@ describe("RateLimiter", () => {
       expect(error.currentRequestCount).toBe(5);
       expect(error.maxRequestLimit).toBe(10);
     });
+
+    it("should throw error for invalid waitTimeMs", () => {
+      expect(() => new RateLimitError("test", -1, 5, 10)).toThrow(
+        "waitTimeMs must be a non-negative number"
+      );
+      expect(() => new RateLimitError("test", "1000" as any, 5, 10)).toThrow(
+        "waitTimeMs must be a non-negative number"
+      );
+    });
+
+    it("should throw error for invalid currentRequestCount", () => {
+      expect(() => new RateLimitError("test", 1000, -1, 10)).toThrow(
+        "currentRequestCount must be a non-negative number"
+      );
+      expect(() => new RateLimitError("test", 1000, "5" as any, 10)).toThrow(
+        "currentRequestCount must be a non-negative number"
+      );
+    });
+
+    it("should throw error for invalid maxRequestLimit", () => {
+      expect(() => new RateLimitError("test", 1000, 5, 0)).toThrow(
+        "maxRequestLimit must be a positive number"
+      );
+      expect(() => new RateLimitError("test", 1000, 5, -1)).toThrow(
+        "maxRequestLimit must be a positive number"
+      );
+      expect(() => new RateLimitError("test", 1000, 5, "10" as any)).toThrow(
+        "maxRequestLimit must be a positive number"
+      );
+    });
+  });
+
+  describe("RateLimiter constructor", () => {
+    it("should throw error for invalid config", () => {
+      expect(() => new RateLimiter(null as any)).toThrow("RateLimitConfig must be an object");
+      expect(() => new RateLimiter(undefined as any)).toThrow("RateLimitConfig must be an object");
+    });
+
+    it("should throw error for invalid maxRequests", () => {
+      expect(() => new RateLimiter({ maxRequests: 0, timeWindow: 100 })).toThrow(
+        "maxRequests must be a positive number"
+      );
+      expect(() => new RateLimiter({ maxRequests: -1, timeWindow: 100 })).toThrow(
+        "maxRequests must be a positive number"
+      );
+      expect(() => new RateLimiter({ maxRequests: "2" as any, timeWindow: 100 })).toThrow(
+        "maxRequests must be a positive number"
+      );
+    });
+
+    it("should throw error for invalid timeWindow", () => {
+      expect(() => new RateLimiter({ maxRequests: 2, timeWindow: 0 })).toThrow(
+        "timeWindow must be a positive number"
+      );
+      expect(() => new RateLimiter({ maxRequests: 2, timeWindow: -1 })).toThrow(
+        "timeWindow must be a positive number"
+      );
+      expect(() => new RateLimiter({ maxRequests: 2, timeWindow: "100" as any })).toThrow(
+        "timeWindow must be a positive number"
+      );
+    });
   });
 
   describe("waitForSlot", () => {

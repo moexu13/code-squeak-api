@@ -14,6 +14,17 @@ export class RateLimitError extends Error {
   ) {
     super(message);
     this.name = "RateLimitError";
+
+    // Validate constructor parameters
+    if (typeof waitTimeMs !== "number" || waitTimeMs < 0) {
+      throw new Error("waitTimeMs must be a non-negative number");
+    }
+    if (typeof currentRequestCount !== "number" || currentRequestCount < 0) {
+      throw new Error("currentRequestCount must be a non-negative number");
+    }
+    if (typeof maxRequestLimit !== "number" || maxRequestLimit <= 0) {
+      throw new Error("maxRequestLimit must be a positive number");
+    }
   }
 }
 
@@ -26,6 +37,17 @@ export class RateLimiter {
   private readonly ERROR_RESET_WINDOW_MS = 60 * 1000; // 1 minute
 
   constructor(config: RateLimitConfig) {
+    // Validate config
+    if (!config || typeof config !== "object") {
+      throw new Error("RateLimitConfig must be an object");
+    }
+    if (typeof config.maxRequests !== "number" || config.maxRequests <= 0) {
+      throw new Error("maxRequests must be a positive number");
+    }
+    if (typeof config.timeWindow !== "number" || config.timeWindow <= 0) {
+      throw new Error("timeWindow must be a positive number");
+    }
+
     this.rateLimitConfig = config;
   }
 
