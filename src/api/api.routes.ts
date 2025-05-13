@@ -52,12 +52,12 @@ const validateParams = async (c: Context, next: Next) => {
   } catch (error: any) {
     logger.error(
       {
-        error: error.message,
+        errorType: error.name,
         context: "Validation Middleware",
       },
       "Error validating params"
     );
-    return c.json({ error: "Invalid parameters", details: error.message }, 400);
+    return c.json({ error: "Invalid parameters" }, 400);
   } finally {
     const endTime = Date.now();
     logger.debug(
@@ -275,7 +275,7 @@ apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", validateParams, asyn
   } catch (error) {
     logger.error(
       {
-        error: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.name : "Unknown",
         owner,
         repoName,
         pullNumber,
@@ -365,7 +365,7 @@ apiRouter.post(
         } catch (commentError) {
           logger.error(
             {
-              error: commentError instanceof Error ? commentError.message : String(commentError),
+              errorType: commentError instanceof Error ? commentError.name : "Unknown",
               owner,
               repoName,
               pullNumber,
@@ -381,7 +381,7 @@ apiRouter.post(
     } catch (error) {
       logger.error(
         {
-          error: error instanceof Error ? error.message : String(error),
+          errorType: error instanceof Error ? error.name : "Unknown",
           owner,
           repoName,
           pullNumber,
