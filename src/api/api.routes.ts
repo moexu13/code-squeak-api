@@ -122,10 +122,22 @@ apiRouter.use("*", async (c: Context<{ Variables: Variables }>, next: Next) => {
   await next();
 });
 
+// Standardize response format
+const createSuccessResponse = (data: any = {}) => ({
+  success: true,
+  ...data,
+});
+
+const createErrorResponse = (error: string, details?: any) => ({
+  success: false,
+  error,
+  ...(details && { details }),
+});
+
 // API routes
 apiRouter.get("/", (c: Context) => {
   logger.info({ context: "API Routes" }, "Root endpoint accessed");
-  return c.text("API is running");
+  return c.json(createSuccessResponse({ message: "API is running" }));
 });
 
 apiRouter.get("/:owner/:repoName", validateParams, async (c: Context) => {
@@ -152,7 +164,7 @@ apiRouter.get("/:owner/:repoName", validateParams, async (c: Context) => {
     "Successfully fetched pull requests"
   );
 
-  return c.json({ pullRequests });
+  return c.json(createSuccessResponse({ pullRequests }));
 });
 
 apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", validateParams, async (c: Context) => {
@@ -176,27 +188,14 @@ apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", validateParams, asyn
     // Sanitize pull request data
     const sanitizedData = Sanitizer.sanitizePullRequestData(pullRequest);
 
-    const analysisPrompt =
-      Sanitizer.sanitizePrompt(`You are a senior software engineer reviewing a pull request. Please analyze the following changes and provide focused feedback:
+    const sanitizedPrompt = DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedData.title)
+      .replace("{description}", sanitizedData.body || "")
+      .replace("{author}", sanitizedData.user)
+      .replace("{state}", sanitizedData.state)
+      .replace("{url}", sanitizedData.url)
+      .replace("{diff}", sanitizedData.diff);
 
-Title: ${sanitizedData.title}
-Description: ${sanitizedData.body || "No description provided"}
-Author: ${sanitizedData.user}
-State: ${sanitizedData.state}
-URL: ${sanitizedData.url}
-
-Changes:
-${sanitizedData.diff}
-
-Please provide a concise analysis focusing on:
-1. Code quality and maintainability
-2. Potential bugs or edge cases
-3. Security implications
-4. Performance considerations
-
-Keep the analysis focused on the technical aspects of the changes.`);
-
-    const analysis = await claudeService.sendMessage(analysisPrompt, {
+    const analysis = await claudeService.sendMessage(sanitizedPrompt, {
       maxTokens: 1000,
       temperature: 0.7,
     });
@@ -211,13 +210,15 @@ Keep the analysis focused on the technical aspects of the changes.`);
       "Successfully analyzed pull request"
     );
 
-    return c.json({
-      pullRequest: {
-        ...sanitizedData,
-        diff: undefined, // Remove the diff from the response
-      },
-      analysis,
-    });
+    return c.json(
+      createSuccessResponse({
+        pullRequest: {
+          ...sanitizedData,
+          diff: undefined, // Remove the diff from the response
+        },
+        analysis,
+      })
+    );
   } catch (error) {
     logger.error(
       {
@@ -238,76 +239,91 @@ apiRouter.post(
   validateParams,
   async (c: Context) => {
     const { owner, repoName, pullNumber } = c.req.param();
+    const body = await c.req.json();
+    const shouldComment = body.postComment !== false;
+    const customPrompt = body.prompt;
+    const maxTokens = body.maxTokens;
+    const temperature = body.temperature;
+
     logger.info(
       {
         owner,
         repoName,
         pullNumber,
+        shouldComment,
+        hasCustomPrompt: !!customPrompt,
+        maxTokens,
+        temperature,
         context: "API Routes",
       },
-      "Analyzing pull request and posting comment"
+      "Starting pull request analysis and comment"
     );
 
-    const githubService = new GitHubService();
-    const claudeService = new ClaudeService();
-
     try {
-      // Parse request body - contains custom options or parameters
-      const body = await c.req.json();
-      const customPrompt = body.prompt;
-      const shouldComment = body.postComment !== false; // Default to true if not specified
-      const analysisOptions = {
-        maxTokens: body.maxTokens || 1000,
-        temperature: body.temperature || 0.7,
-      };
+      const githubService = new GitHubService();
+      const claudeService = new ClaudeService();
 
-      // Get the pull request data
-      const pullRequest = await githubService.getPullRequest(owner, repoName, parseInt(pullNumber));
-      const sanitizedData = Sanitizer.sanitizePullRequestData(pullRequest);
+      // Get pull request data
+      const pullRequestData = await githubService.getPullRequest(
+        owner,
+        repoName,
+        parseInt(pullNumber)
+      );
 
-      // Use custom prompt if provided, otherwise use default
-      const analysisPrompt = customPrompt
+      // Sanitize the data
+      const sanitizedData = Sanitizer.sanitizePullRequestData(pullRequestData);
+      const sanitizedPrompt = customPrompt
         ? Sanitizer.sanitizePrompt(customPrompt)
-        : Sanitizer.sanitizePrompt(
-            DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedData.title)
-              .replace("{description}", sanitizedData.body || "No description provided")
-              .replace("{author}", sanitizedData.user)
-              .replace("{state}", sanitizedData.state)
-              .replace("{url}", sanitizedData.url)
-              .replace("{diff}", sanitizedData.diff)
-          );
+        : DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedData.title)
+            .replace("{description}", sanitizedData.body || "")
+            .replace("{author}", sanitizedData.user)
+            .replace("{state}", sanitizedData.state)
+            .replace("{url}", sanitizedData.url)
+            .replace("{diff}", sanitizedData.diff);
 
       // Get analysis from Claude
-      const analysis = await claudeService.sendMessage(analysisPrompt, analysisOptions);
+      const analysis = await claudeService.sendMessage(sanitizedPrompt, {
+        maxTokens,
+        temperature,
+      });
 
       // Post comment to the PR if requested
       if (shouldComment) {
-        await githubService.createPullRequestComment(
-          owner,
-          repoName,
-          parseInt(pullNumber),
-          `${COMMENT_HEADER}\n\n${analysis}`
-        );
-
-        logger.info(
-          {
+        try {
+          await githubService.createPullRequestComment(
             owner,
             repoName,
-            pullNumber,
-            context: "API Routes",
-          },
-          "Successfully posted review comment to pull request"
-        );
+            parseInt(pullNumber),
+            `${COMMENT_HEADER}\n\n${analysis}`
+          );
+
+          logger.info(
+            {
+              owner,
+              repoName,
+              pullNumber,
+              context: "API Routes",
+            },
+            "Successfully posted review comment to pull request"
+          );
+
+          return c.json({ success: true });
+        } catch (commentError) {
+          logger.error(
+            {
+              error: commentError instanceof Error ? commentError.message : String(commentError),
+              owner,
+              repoName,
+              pullNumber,
+              context: "API Routes",
+            },
+            "Failed to post comment"
+          );
+          throw commentError;
+        }
       }
 
-      return c.json({
-        pullRequest: {
-          ...sanitizedData,
-          diff: undefined, // Remove the diff from the response
-        },
-        analysis,
-        commentPosted: shouldComment,
-      });
+      return c.json({ success: true });
     } catch (error) {
       logger.error(
         {

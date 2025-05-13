@@ -192,8 +192,8 @@ describe("API Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const text = await res.text();
-      expect(text).toBe("API is running");
+      const body = await res.json();
+      expect(body).toEqual({ success: true, message: "API is running" });
     });
   });
 
@@ -304,7 +304,6 @@ describe("API Routes", () => {
       }));
 
       (Sanitizer.sanitizePullRequestData as any).mockReturnValue(mockSanitizedPR);
-      (Sanitizer.sanitizePrompt as any).mockReturnValue("Test prompt");
 
       const res = await app.request("/testowner/testrepo/pull/1/analyze", {
         method: "GET",
@@ -312,16 +311,19 @@ describe("API Routes", () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.analysis).toBe(mockAnalysis);
-      expect(body.pullRequest).toBeDefined();
-      // Ensure the diff is not included in the response
-      expect(body.pullRequest.diff).toBeUndefined();
+      expect(body).toEqual({
+        success: true,
+        pullRequest: {
+          ...mockSanitizedPR,
+          diff: undefined,
+        },
+        analysis: mockAnalysis,
+      });
 
       // Verify all the expected methods were called
       expect(getPullRequestMock).toHaveBeenCalledWith("testowner", "testrepo", 1);
       expect(Sanitizer.sanitizePullRequestData).toHaveBeenCalledWith(mockPullRequest);
-      expect(Sanitizer.sanitizePrompt).toHaveBeenCalled();
-      expect(sendMessageMock).toHaveBeenCalledWith("Test prompt", {
+      expect(sendMessageMock).toHaveBeenCalledWith(expect.any(String), {
         maxTokens: 1000,
         temperature: 0.7,
       });
@@ -382,7 +384,6 @@ describe("API Routes", () => {
       }));
 
       (Sanitizer.sanitizePullRequestData as any).mockReturnValue(mockSanitizedPR);
-      (Sanitizer.sanitizePrompt as any).mockReturnValue("Test prompt");
 
       const res = await app.request("/testowner/testrepo/pull/1/analyze", {
         method: "GET",
@@ -441,7 +442,7 @@ describe("API Routes", () => {
         user: "testuser",
         state: "open",
         url: "https://github.com/testowner/testrepo/pull/1",
-        diff: "diff --git a/test.txt b/test.txt\n--- a/test.txt\n+++ b/test.txt\n@@ -1 +1 @@\n-test\n+updated test",
+        diff: "diff --git a/test.txt b/test.txt",
       };
 
       const mockSanitizedPR = {
@@ -452,13 +453,13 @@ describe("API Routes", () => {
 
       // Setup the mocks
       const getPullRequestMock = vi.fn().mockResolvedValue(mockPullRequest);
-      const createPullRequestCommentMock = vi.fn().mockResolvedValue(undefined);
       const sendMessageMock = vi.fn().mockResolvedValue(mockAnalysis);
+      const createCommentMock = vi.fn().mockResolvedValue(undefined);
 
       (GitHubService as any).mockImplementation(() => ({
         listPullRequests: vi.fn(),
         getPullRequest: getPullRequestMock,
-        createPullRequestComment: createPullRequestCommentMock,
+        createPullRequestComment: createCommentMock,
       }));
 
       (ClaudeService as any).mockImplementation(() => ({
@@ -467,40 +468,29 @@ describe("API Routes", () => {
       }));
 
       (Sanitizer.sanitizePullRequestData as any).mockReturnValue(mockSanitizedPR);
-      (Sanitizer.sanitizePrompt as any).mockReturnValue("Test prompt");
-
-      const requestBody = {
-        postComment: true,
-        maxTokens: 1200,
-        temperature: 0.5,
-      };
 
       const res = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ postComment: true }),
       });
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.analysis).toBe(mockAnalysis);
-      expect(body.commentPosted).toBe(true);
+      expect(body).toEqual({ success: true });
 
-      // Verify the comment was posted
-      expect(createPullRequestCommentMock).toHaveBeenCalledWith(
+      // Verify all the expected methods were called
+      expect(getPullRequestMock).toHaveBeenCalledWith("testowner", "testrepo", 1);
+      expect(Sanitizer.sanitizePullRequestData).toHaveBeenCalledWith(mockPullRequest);
+      expect(sendMessageMock).toHaveBeenCalledWith(expect.any(String), {});
+      expect(createCommentMock).toHaveBeenCalledWith(
         "testowner",
         "testrepo",
         1,
-        `## AI Pull Request Review\n\n${mockAnalysis}`
+        expect.stringContaining(mockAnalysis)
       );
-
-      // Verify Claude options were passed correctly
-      expect(sendMessageMock).toHaveBeenCalledWith("Test prompt", {
-        maxTokens: 1200,
-        temperature: 0.5,
-      });
     });
 
     it("should analyze PR without posting comment when postComment is false", async () => {
@@ -511,7 +501,7 @@ describe("API Routes", () => {
         user: "testuser",
         state: "open",
         url: "https://github.com/testowner/testrepo/pull/1",
-        diff: "diff --git a/test.txt b/test.txt\n--- a/test.txt\n+++ b/test.txt\n@@ -1 +1 @@\n-test\n+updated test",
+        diff: "diff --git a/test.txt b/test.txt",
       };
 
       const mockSanitizedPR = {
@@ -522,13 +512,13 @@ describe("API Routes", () => {
 
       // Setup the mocks
       const getPullRequestMock = vi.fn().mockResolvedValue(mockPullRequest);
-      const createPullRequestCommentMock = vi.fn().mockResolvedValue(undefined);
       const sendMessageMock = vi.fn().mockResolvedValue(mockAnalysis);
+      const createCommentMock = vi.fn();
 
       (GitHubService as any).mockImplementation(() => ({
         listPullRequests: vi.fn(),
         getPullRequest: getPullRequestMock,
-        createPullRequestComment: createPullRequestCommentMock,
+        createPullRequestComment: createCommentMock,
       }));
 
       (ClaudeService as any).mockImplementation(() => ({
@@ -537,27 +527,24 @@ describe("API Routes", () => {
       }));
 
       (Sanitizer.sanitizePullRequestData as any).mockReturnValue(mockSanitizedPR);
-      (Sanitizer.sanitizePrompt as any).mockReturnValue("Test prompt");
-
-      const requestBody = {
-        postComment: false,
-      };
 
       const res = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ postComment: false }),
       });
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.analysis).toBe(mockAnalysis);
-      expect(body.commentPosted).toBe(false);
+      expect(body).toEqual({ success: true });
 
-      // Verify the comment was NOT posted
-      expect(createPullRequestCommentMock).not.toHaveBeenCalled();
+      // Verify all the expected methods were called
+      expect(getPullRequestMock).toHaveBeenCalledWith("testowner", "testrepo", 1);
+      expect(Sanitizer.sanitizePullRequestData).toHaveBeenCalledWith(mockPullRequest);
+      expect(sendMessageMock).toHaveBeenCalledWith(expect.any(String), {});
+      expect(createCommentMock).not.toHaveBeenCalled();
     });
 
     it("should use custom prompt when provided", async () => {

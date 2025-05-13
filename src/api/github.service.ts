@@ -56,8 +56,8 @@ export class GitHubService {
     throw new GitHubError(error.message || "Unexpected GitHub API error");
   }
 
-  async listPullRequests(owner: string, repo: string): Promise<any[]> {
-    const cacheKey = this.getCacheKey("listPullRequests", owner, repo);
+  async listPullRequests(owner: string, repoName: string): Promise<any[]> {
+    const cacheKey = this.getCacheKey("listPullRequests", owner, repoName);
     const cached = await this.redis.get<any[]>(cacheKey);
     if (cached) return cached;
 
@@ -65,7 +65,7 @@ export class GitHubService {
       try {
         const response = await this.octokit.pulls.list({
           owner,
-          repo,
+          repo: repoName,
           state: "open",
           sort: "updated",
           direction: "desc",
@@ -74,14 +74,14 @@ export class GitHubService {
         await this.redis.set(cacheKey, response.data, this.CACHE_TTL);
         return response.data;
       } catch (error) {
-        this.handleGitHubError(error, `listPullRequests(${owner}/${repo})`);
+        this.handleGitHubError(error, `listPullRequests(${owner}/${repoName})`);
       }
     });
   }
 
   async getPullRequest(
     owner: string,
-    repo: string,
+    repoName: string,
     pullNumber: number
   ): Promise<{
     title: string;
@@ -91,7 +91,7 @@ export class GitHubService {
     url: string;
     diff: string;
   }> {
-    const cacheKey = this.getCacheKey("getPullRequest", owner, repo, pullNumber.toString());
+    const cacheKey = this.getCacheKey("getPullRequest", owner, repoName, pullNumber.toString());
     const cached = await this.redis.get<{
       title: string;
       body: string | null;
@@ -106,14 +106,14 @@ export class GitHubService {
       try {
         const response = await this.octokit.pulls.get({
           owner,
-          repo,
+          repo: repoName,
           pull_number: pullNumber,
         });
 
         // Get the diff
         const { data: diff } = (await this.octokit.pulls.get({
           owner,
-          repo,
+          repo: repoName,
           pull_number: pullNumber,
           mediaType: {
             format: "diff",
@@ -132,7 +132,7 @@ export class GitHubService {
         await this.redis.set(cacheKey, result, this.CACHE_TTL);
         return result;
       } catch (error) {
-        this.handleGitHubError(error, `getPullRequest(${owner}/${repo}#${pullNumber})`);
+        this.handleGitHubError(error, `getPullRequest(${owner}/${repoName}#${pullNumber})`);
       }
     });
   }
@@ -162,22 +162,53 @@ export class GitHubService {
 
   async createPullRequestComment(
     owner: string,
-    repo: string,
+    repoName: string,
     pullNumber: number,
     body: string
   ): Promise<void> {
     return this.circuitBreaker.execute(async () => {
       try {
-        await this.octokit.issues.createComment({
+        logger.debug(
+          {
+            owner,
+            repoName,
+            pullNumber,
+            bodyLength: body.length,
+            context: "GitHubService",
+          },
+          "Creating pull request comment"
+        );
+
+        const response = await this.octokit.issues.createComment({
           owner,
-          repo,
+          repo: repoName,
           issue_number: pullNumber, // Pull requests are treated as issues in the GitHub API
           body,
         });
 
-        logger.info({ owner, repo, pullNumber }, "Successfully created comment on pull request");
+        if (!response?.data) {
+          throw new Error("Empty response from GitHub API");
+        }
+
+        logger.info(
+          { owner, repoName, pullNumber, commentId: response.data.id },
+          "Successfully created comment on pull request"
+        );
       } catch (error) {
-        this.handleGitHubError(error, `createPullRequestComment(${owner}/${repo}#${pullNumber})`);
+        logger.error(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            owner,
+            repoName,
+            pullNumber,
+            context: "GitHubService",
+          },
+          "Failed to create pull request comment"
+        );
+        this.handleGitHubError(
+          error,
+          `createPullRequestComment(${owner}/${repoName}#${pullNumber})`
+        );
       }
     });
   }

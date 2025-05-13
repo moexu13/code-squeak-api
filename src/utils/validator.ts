@@ -37,9 +37,9 @@ export const validateRepo = (repo: string): void => {
 
 export const validatePullRequestParams = async (c: Context, next: Next) => {
   try {
-    const { owner, repo, pullNumber } = c.req.param();
+    const { owner, repoName, pullNumber } = c.req.param();
     validateOwner(owner);
-    validateRepo(repo);
+    validateRepo(repoName);
     if (pullNumber) {
       validatePullRequestNumber(pullNumber);
     }
