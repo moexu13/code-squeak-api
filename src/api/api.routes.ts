@@ -37,7 +37,7 @@ and explain your reasoning for each suggestion.`;
 const COMMENT_HEADER = "🐀 CodeSqueak AI Review";
 
 // Define types for request bodies
-type AnalyzeAndCommentBody = {
+type AnalyzeAndCommentRequestBody = {
   postComment?: boolean;
   prompt?: string;
   maxTokens?: number;
@@ -46,7 +46,7 @@ type AnalyzeAndCommentBody = {
 
 // Validation middleware
 const validateParams = async (c: Context, next: Next) => {
-  const start = Date.now();
+  const startTime = Date.now();
   try {
     return await validatePullRequestParams(c, next);
   } catch (error: any) {
@@ -59,32 +59,32 @@ const validateParams = async (c: Context, next: Next) => {
     );
     return c.json({ error: "Invalid parameters", details: error.message }, 400);
   } finally {
-    const end = Date.now();
+    const endTime = Date.now();
     logger.debug(
       {
-        executionTime: `${end - start}ms`,
+        executionTime: `${endTime - startTime}ms`,
         context: "Validation Middleware",
       },
-      `validateParams middleware executed in ${end - start}ms`
+      `validateParams middleware executed in ${endTime - startTime}ms`
     );
   }
 };
 
 // Middleware to inject environment variables
 apiRouter.use("*", async (c: Context<{ Variables: Variables }>, next: Next) => {
-  const apiKey = process.env.GITHUB_TOKEN;
+  const githubToken = process.env.GITHUB_TOKEN;
 
   logger.debug(
     {
       hasProcessToken: !!process.env.GITHUB_TOKEN,
-      tokenLength: apiKey?.length,
+      tokenLength: githubToken?.length,
       environment: process.env.NODE_ENV,
       context: "API Middleware",
     },
     "Checking GitHub token"
   );
 
-  if (!apiKey) {
+  if (!githubToken) {
     logger.error(
       {
         hasProcessToken: false,
@@ -105,10 +105,10 @@ apiRouter.use("*", async (c: Context<{ Variables: Variables }>, next: Next) => {
     );
   }
 
-  if (apiKey.length < 40) {
+  if (githubToken.length < 40) {
     logger.error(
       {
-        tokenLength: apiKey.length,
+        tokenLength: githubToken.length,
         expectedLength: ">= 40",
         context: "API Middleware",
       },
@@ -118,7 +118,7 @@ apiRouter.use("*", async (c: Context<{ Variables: Variables }>, next: Next) => {
       {
         error: "Invalid GitHub token configuration",
         details: {
-          tokenLength: apiKey.length,
+          tokenLength: githubToken.length,
           expectedLength: ">= 40",
         },
       },
@@ -126,7 +126,7 @@ apiRouter.use("*", async (c: Context<{ Variables: Variables }>, next: Next) => {
     );
   }
 
-  c.set("apiKey", apiKey);
+  c.set("apiKey", githubToken);
   await next();
 });
 
@@ -144,38 +144,42 @@ const createErrorResponse = (error: string, details?: any) => ({
 
 // Add validation middleware for analyze-and-comment request body
 const validateAnalyzeAndCommentBody = async (c: Context, next: Next) => {
-  const body = await c.req.json();
+  const requestBody = await c.req.json();
 
   // Validate postComment
-  if (body.postComment !== undefined && typeof body.postComment !== "boolean") {
+  if (requestBody.postComment !== undefined && typeof requestBody.postComment !== "boolean") {
     return c.json({ error: "postComment must be a boolean value" }, 400);
   }
 
   // Validate prompt if provided
-  if (body.prompt !== undefined && typeof body.prompt !== "string") {
+  if (requestBody.prompt !== undefined && typeof requestBody.prompt !== "string") {
     return c.json({ error: "prompt must be a string" }, 400);
   }
 
   // Validate maxTokens if provided
-  if (body.maxTokens !== undefined) {
+  if (requestBody.maxTokens !== undefined) {
     if (
-      typeof body.maxTokens !== "number" ||
-      !Number.isInteger(body.maxTokens) ||
-      body.maxTokens <= 0
+      typeof requestBody.maxTokens !== "number" ||
+      !Number.isInteger(requestBody.maxTokens) ||
+      requestBody.maxTokens <= 0
     ) {
       return c.json({ error: "maxTokens must be a positive integer" }, 400);
     }
   }
 
   // Validate temperature if provided
-  if (body.temperature !== undefined) {
-    if (typeof body.temperature !== "number" || body.temperature < 0 || body.temperature > 1) {
+  if (requestBody.temperature !== undefined) {
+    if (
+      typeof requestBody.temperature !== "number" ||
+      requestBody.temperature < 0 ||
+      requestBody.temperature > 1
+    ) {
       return c.json({ error: "temperature must be a number between 0 and 1" }, 400);
     }
   }
 
   // Store the validated body in the context for the route handler to use
-  c.set("validatedBody", body);
+  c.set("validatedBody", requestBody);
   return next();
 };
 
@@ -228,19 +232,23 @@ apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", validateParams, asyn
   const claudeService = new ClaudeService();
 
   try {
-    const pullRequest = await githubService.getPullRequest(owner, repoName, parseInt(pullNumber));
+    const pullRequestData = await githubService.getPullRequest(
+      owner,
+      repoName,
+      parseInt(pullNumber)
+    );
 
     // Sanitize pull request data
-    const sanitizedData = Sanitizer.sanitizePullRequestData(pullRequest);
+    const sanitizedPullRequest = Sanitizer.sanitizePullRequestData(pullRequestData);
 
-    const sanitizedPrompt = DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedData.title)
-      .replace("{description}", sanitizedData.body || "")
-      .replace("{author}", sanitizedData.user)
-      .replace("{state}", sanitizedData.state)
-      .replace("{url}", sanitizedData.url)
-      .replace("{diff}", sanitizedData.diff);
+    const formattedPrompt = DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedPullRequest.title)
+      .replace("{description}", sanitizedPullRequest.body || "")
+      .replace("{author}", sanitizedPullRequest.user)
+      .replace("{state}", sanitizedPullRequest.state)
+      .replace("{url}", sanitizedPullRequest.url)
+      .replace("{diff}", sanitizedPullRequest.diff);
 
-    const analysis = await claudeService.sendMessage(sanitizedPrompt, {
+    const analysisResult = await claudeService.sendMessage(formattedPrompt, {
       maxTokens: 1000,
       temperature: 0.7,
     });
@@ -258,10 +266,10 @@ apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", validateParams, asyn
     return c.json(
       createSuccessResponse({
         pullRequest: {
-          ...sanitizedData,
+          ...sanitizedPullRequest,
           diff: undefined, // Remove the diff from the response
         },
-        analysis,
+        analysis: analysisResult,
       })
     );
   } catch (error) {
@@ -285,18 +293,18 @@ apiRouter.post(
   validateAnalyzeAndCommentBody,
   async (c: Context) => {
     const { owner, repoName, pullNumber } = c.req.param();
-    const body = c.get("validatedBody");
-    const shouldComment = body.postComment !== false;
-    const customPrompt = body.prompt;
-    const maxTokens = body.maxTokens;
-    const temperature = body.temperature;
+    const requestBody = c.get("validatedBody");
+    const shouldPostComment = requestBody.postComment !== false;
+    const customPrompt = requestBody.prompt;
+    const maxTokens = requestBody.maxTokens;
+    const temperature = requestBody.temperature;
 
     logger.info(
       {
         owner,
         repoName,
         pullNumber,
-        shouldComment,
+        shouldPostComment,
         hasCustomPrompt: !!customPrompt,
         maxTokens,
         temperature,
@@ -317,30 +325,30 @@ apiRouter.post(
       );
 
       // Sanitize the data
-      const sanitizedData = Sanitizer.sanitizePullRequestData(pullRequestData);
-      const sanitizedPrompt = customPrompt
+      const sanitizedPullRequest = Sanitizer.sanitizePullRequestData(pullRequestData);
+      const formattedPrompt = customPrompt
         ? Sanitizer.sanitizePrompt(customPrompt)
-        : DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedData.title)
-            .replace("{description}", sanitizedData.body || "")
-            .replace("{author}", sanitizedData.user)
-            .replace("{state}", sanitizedData.state)
-            .replace("{url}", sanitizedData.url)
-            .replace("{diff}", sanitizedData.diff);
+        : DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedPullRequest.title)
+            .replace("{description}", sanitizedPullRequest.body || "")
+            .replace("{author}", sanitizedPullRequest.user)
+            .replace("{state}", sanitizedPullRequest.state)
+            .replace("{url}", sanitizedPullRequest.url)
+            .replace("{diff}", sanitizedPullRequest.diff);
 
       // Get analysis from Claude
-      const analysis = await claudeService.sendMessage(sanitizedPrompt, {
+      const analysisResult = await claudeService.sendMessage(formattedPrompt, {
         maxTokens,
         temperature,
       });
 
       // Post comment to the PR if requested
-      if (shouldComment) {
+      if (shouldPostComment) {
         try {
           await githubService.createPullRequestComment(
             owner,
             repoName,
             parseInt(pullNumber),
-            `${COMMENT_HEADER}\n\n${analysis}`
+            `${COMMENT_HEADER}\n\n${analysisResult}`
           );
 
           logger.info(

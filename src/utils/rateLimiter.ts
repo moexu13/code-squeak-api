@@ -8,9 +8,9 @@ interface RateLimitConfig {
 export class RateLimitError extends Error {
   constructor(
     message: string,
-    public readonly waitTime: number,
-    public readonly currentRequests: number,
-    public readonly maxRequests: number
+    public readonly waitTimeMs: number,
+    public readonly currentRequestCount: number,
+    public readonly maxRequestLimit: number
   ) {
     super(message);
     this.name = "RateLimitError";
@@ -18,77 +18,83 @@ export class RateLimitError extends Error {
 }
 
 export class RateLimiter {
-  private requests: number[] = [];
-  private config: RateLimitConfig;
-  private lastErrorTime: number | null = null;
-  private errorCount: number = 0;
-  private readonly MAX_ERRORS_BEFORE_RESET = 5;
-  private readonly ERROR_WINDOW = 60 * 1000; // 1 minute
+  private requestTimestamps: number[] = [];
+  private rateLimitConfig: RateLimitConfig;
+  private lastErrorTimestamp: number | null = null;
+  private consecutiveErrorCount: number = 0;
+  private readonly MAX_CONSECUTIVE_ERRORS = 5;
+  private readonly ERROR_RESET_WINDOW_MS = 60 * 1000; // 1 minute
 
   constructor(config: RateLimitConfig) {
-    this.config = config;
+    this.rateLimitConfig = config;
   }
 
-  private resetIfNeeded(): void {
-    const now = Date.now();
-    if (this.lastErrorTime && now - this.lastErrorTime > this.ERROR_WINDOW) {
-      this.errorCount = 0;
-      this.lastErrorTime = null;
+  private resetErrorCountIfNeeded(): void {
+    const currentTimestamp = Date.now();
+    if (
+      this.lastErrorTimestamp &&
+      currentTimestamp - this.lastErrorTimestamp > this.ERROR_RESET_WINDOW_MS
+    ) {
+      this.consecutiveErrorCount = 0;
+      this.lastErrorTimestamp = null;
     }
   }
 
-  private handleError(): void {
-    const now = Date.now();
-    this.errorCount++;
-    this.lastErrorTime = now;
+  private handleRateLimitError(): void {
+    const currentTimestamp = Date.now();
+    this.consecutiveErrorCount++;
+    this.lastErrorTimestamp = currentTimestamp;
 
-    if (this.errorCount >= this.MAX_ERRORS_BEFORE_RESET) {
+    if (this.consecutiveErrorCount >= this.MAX_CONSECUTIVE_ERRORS) {
       logger.warn(
         {
-          errorCount: this.errorCount,
+          errorCount: this.consecutiveErrorCount,
           context: "RateLimiter",
         },
         "Too many errors, resetting rate limiter"
       );
-      this.requests = [];
-      this.errorCount = 0;
+      this.requestTimestamps = [];
+      this.consecutiveErrorCount = 0;
     }
   }
 
   async waitForSlot(): Promise<void> {
-    const now = Date.now();
-    this.resetIfNeeded();
+    const currentTimestamp = Date.now();
+    this.resetErrorCountIfNeeded();
 
     // Remove old requests outside the time window
-    this.requests = this.requests.filter((time) => now - time < this.config.timeWindow);
+    this.requestTimestamps = this.requestTimestamps.filter(
+      (timestamp) => currentTimestamp - timestamp < this.rateLimitConfig.timeWindow
+    );
 
     // If we've hit the limit, wait
-    if (this.requests.length >= this.config.maxRequests) {
-      const oldestRequest = this.requests[0];
-      const waitTime = this.config.timeWindow - (now - oldestRequest);
+    if (this.requestTimestamps.length >= this.rateLimitConfig.maxRequests) {
+      const oldestRequestTimestamp = this.requestTimestamps[0];
+      const waitTimeMs =
+        this.rateLimitConfig.timeWindow - (currentTimestamp - oldestRequestTimestamp);
 
       logger.debug(
         {
-          currentRequests: this.requests.length,
-          maxRequests: this.config.maxRequests,
-          waitTime,
+          currentRequestCount: this.requestTimestamps.length,
+          maxRequestLimit: this.rateLimitConfig.maxRequests,
+          waitTimeMs,
           context: "RateLimiter",
         },
         "Rate limit reached, waiting"
       );
 
-      this.handleError();
+      this.handleRateLimitError();
 
       // Throw a specific error with details
       throw new RateLimitError(
         "Rate limit exceeded",
-        waitTime,
-        this.requests.length,
-        this.config.maxRequests
+        waitTimeMs,
+        this.requestTimestamps.length,
+        this.rateLimitConfig.maxRequests
       );
     }
 
     // Add current request
-    this.requests.push(now);
+    this.requestTimestamps.push(currentTimestamp);
   }
 }

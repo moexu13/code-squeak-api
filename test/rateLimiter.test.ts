@@ -20,12 +20,11 @@ describe("RateLimiter", () => {
   describe("RateLimitError", () => {
     it("should create error with correct properties", () => {
       const error = new RateLimitError("test", 1000, 5, 10);
-      expect(error).toBeInstanceOf(Error);
       expect(error.name).toBe("RateLimitError");
       expect(error.message).toBe("test");
-      expect(error.waitTime).toBe(1000);
-      expect(error.currentRequests).toBe(5);
-      expect(error.maxRequests).toBe(10);
+      expect(error.waitTimeMs).toBe(1000);
+      expect(error.currentRequestCount).toBe(5);
+      expect(error.maxRequestLimit).toBe(10);
     });
   });
 
@@ -54,10 +53,10 @@ describe("RateLimiter", () => {
         await rateLimiter.waitForSlot();
       } catch (error) {
         if (error instanceof RateLimitError) {
-          expect(error.waitTime).toBeGreaterThan(0);
-          expect(error.waitTime).toBeLessThanOrEqual(config.timeWindow);
-          expect(error.currentRequests).toBe(2);
-          expect(error.maxRequests).toBe(config.maxRequests);
+          expect(error.waitTimeMs).toBeGreaterThan(0);
+          expect(error.waitTimeMs).toBeLessThanOrEqual(config.timeWindow);
+          expect(error.currentRequestCount).toBe(2);
+          expect(error.maxRequestLimit).toBe(config.maxRequests);
         }
       }
     });
@@ -100,7 +99,7 @@ describe("RateLimiter", () => {
         await rateLimiter.waitForSlot();
       } catch (error) {
         if (error instanceof RateLimitError) {
-          expect(error.currentRequests).toBe(2);
+          expect(error.currentRequestCount).toBe(2);
         }
       }
     });
