@@ -36,6 +36,14 @@ and explain your reasoning for each suggestion.`;
 
 const COMMENT_HEADER = "🐀 CodeSqueak AI Review";
 
+// Define types for request bodies
+type AnalyzeAndCommentBody = {
+  postComment?: boolean;
+  prompt?: string;
+  maxTokens?: number;
+  temperature?: number;
+};
+
 // Validation middleware
 const validateParams = async (c: Context, next: Next) => {
   const start = Date.now();
@@ -133,6 +141,43 @@ const createErrorResponse = (error: string, details?: any) => ({
   error,
   ...(details && { details }),
 });
+
+// Add validation middleware for analyze-and-comment request body
+const validateAnalyzeAndCommentBody = async (c: Context, next: Next) => {
+  const body = await c.req.json();
+
+  // Validate postComment
+  if (body.postComment !== undefined && typeof body.postComment !== "boolean") {
+    return c.json({ error: "postComment must be a boolean value" }, 400);
+  }
+
+  // Validate prompt if provided
+  if (body.prompt !== undefined && typeof body.prompt !== "string") {
+    return c.json({ error: "prompt must be a string" }, 400);
+  }
+
+  // Validate maxTokens if provided
+  if (body.maxTokens !== undefined) {
+    if (
+      typeof body.maxTokens !== "number" ||
+      !Number.isInteger(body.maxTokens) ||
+      body.maxTokens <= 0
+    ) {
+      return c.json({ error: "maxTokens must be a positive integer" }, 400);
+    }
+  }
+
+  // Validate temperature if provided
+  if (body.temperature !== undefined) {
+    if (typeof body.temperature !== "number" || body.temperature < 0 || body.temperature > 1) {
+      return c.json({ error: "temperature must be a number between 0 and 1" }, 400);
+    }
+  }
+
+  // Store the validated body in the context for the route handler to use
+  c.set("validatedBody", body);
+  return next();
+};
 
 // API routes
 apiRouter.get("/", (c: Context) => {
@@ -237,9 +282,10 @@ apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", validateParams, asyn
 apiRouter.post(
   "/:owner/:repoName/pull/:pullNumber/analyze-and-comment",
   validateParams,
+  validateAnalyzeAndCommentBody,
   async (c: Context) => {
     const { owner, repoName, pullNumber } = c.req.param();
-    const body = await c.req.json();
+    const body = c.get("validatedBody");
     const shouldComment = body.postComment !== false;
     const customPrompt = body.prompt;
     const maxTokens = body.maxTokens;

@@ -645,5 +645,51 @@ describe("API Routes", () => {
       const body = await res.json();
       expect(body.error).toBe("Invalid pull request number");
     });
+
+    it("should validate request body parameters", async () => {
+      // Test invalid postComment type
+      const res1 = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ postComment: "true" }),
+      });
+      expect(res1.status).toBe(400);
+      expect(await res1.json()).toEqual({ error: "postComment must be a boolean value" });
+
+      // Test invalid prompt type
+      const res2 = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt: 123 }),
+      });
+      expect(res2.status).toBe(400);
+      expect(await res2.json()).toEqual({ error: "prompt must be a string" });
+
+      // Test invalid maxTokens
+      const res3 = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ maxTokens: -1 }),
+      });
+      expect(res3.status).toBe(400);
+      expect(await res3.json()).toEqual({ error: "maxTokens must be a positive integer" });
+
+      // Test invalid temperature
+      const res4 = await app.request("/testowner/testrepo/pull/1/analyze-and-comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ temperature: 2 }),
+      });
+      expect(res4.status).toBe(400);
+      expect(await res4.json()).toEqual({ error: "temperature must be a number between 0 and 1" });
+    });
   });
 });
