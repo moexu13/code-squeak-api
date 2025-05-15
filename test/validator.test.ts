@@ -75,8 +75,9 @@ describe("Validator", () => {
     it("should call next() for valid parameters", async () => {
       const mockContext = {
         req: {
-          param: () => ({ owner: "validuser", repo: "valid-repo" }),
+          param: () => ({ owner: "validuser", repoName: "valid-repo" }),
         },
+        json: vi.fn(),
       };
       const mockNext = vi.fn();
 
@@ -88,7 +89,7 @@ describe("Validator", () => {
       const mockJson = vi.fn();
       const mockContext = {
         req: {
-          param: () => ({ owner: "invalid@user", repo: "valid-repo" }),
+          param: () => ({ owner: "invalid@user", repoName: "valid-repo" }),
         },
         json: mockJson,
       };
@@ -107,7 +108,7 @@ describe("Validator", () => {
       const mockJson = vi.fn();
       const mockContext = {
         req: {
-          param: () => ({ owner: "validuser", repo: "invalid@repo" }),
+          param: () => ({ owner: "validuser", repoName: "invalid@repo" }),
         },
         json: mockJson,
       };
@@ -133,6 +134,7 @@ describe("Validator", () => {
             throw unexpectedError;
           },
         },
+        json: vi.fn(),
       };
       const mockNext = vi.fn();
 

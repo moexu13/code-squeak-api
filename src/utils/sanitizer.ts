@@ -1,43 +1,42 @@
-import logger from "./logger";
-
 export class Sanitizer {
   static sanitizeText(text: string | null | undefined, maxLength: number = 1000): string {
     if (!text) return "";
-
-    // First remove script tags and their content
-    let sanitized = text.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ");
-
-    // Then remove any remaining HTML tags
-    sanitized = sanitized.replace(/<[^>]*>/g, " ");
-
-    // Remove any potential code injection markers
-    sanitized = sanitized.replace(/```[\s\S]*?```/g, "  ");
-
-    // Remove any potential command injection markers
-    sanitized = sanitized.replace(/`[^`]*`/g, "  ");
-
-    // Remove any potential URL injection markers
-    sanitized = sanitized.replace(/https?:\/\/[^\s]+/g, "  ");
-
-    // Remove any potential special characters that might cause issues
-    sanitized = sanitized.replace(/[^\w\s.,?-]/g, " ");
-
-    // Replace all whitespace sequences with a single space
-    sanitized = sanitized.replace(/\s+/g, " ");
-
-    // Trim whitespace and limit length
-    sanitized = sanitized.trim().slice(0, maxLength);
-
-    logger.debug(
-      {
-        originalLength: text.length,
-        sanitizedLength: sanitized.length,
-        context: "Sanitizer",
-      },
-      "Text sanitized"
+    return (
+      text
+        // Remove code blocks and their content
+        .replace(/```[\s\S]*?```/g, " ")
+        // Remove inline code
+        .replace(/`[^`]*`/g, " ")
+        // Remove URLs
+        .replace(/https?:\/\/[^\s]+/g, " ")
+        // Remove script tags and their content
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
+        // Remove other HTML tags
+        .replace(/<[^>]*>/g, " ")
+        // Remove special characters
+        .replace(/[^\w\s]/g, " ")
+        // Normalize whitespace
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, maxLength)
     );
+  }
 
-    return sanitized;
+  static sanitizePrompt(prompt: string): string {
+    return (
+      prompt
+        // Remove prompt injection markers but keep their content with spaces
+        .replace(/\[INST\](.*?)\[\/INST\]/g, "$1 ")
+        // Remove system prompt markers but keep their content with spaces
+        .replace(/<\|im_start\|>(.*?)<\|im_end\|>/g, "$1 ")
+        // Remove role markers but keep their content with spaces
+        .replace(/<\|(user|assistant)\|>/g, " ")
+        // Remove special characters
+        .replace(/[^\w\s]/g, " ")
+        // Normalize whitespace
+        .replace(/\s+/g, " ")
+        .trim()
+    );
   }
 
   static sanitizePullRequestData(data: {
@@ -55,11 +54,26 @@ export class Sanitizer {
     url: string;
     diff: string;
   } {
-    // For diff content, we want to preserve code-like content
+    // Sanitize diff content with stricter rules
     const sanitizedDiff = data.diff
+      // Remove code block markers but keep their content
+      .replace(/```(?:diff)?\s*([\s\S]*?)```/g, "$1")
+      // Replace first diff marker with 'diff' and remove subsequent markers
+      .replace(/^[-+]/gm, (match, offset, string) => {
+        // Only replace the first occurrence with 'diff'
+        return offset === 0 ? "diff " : "";
+      })
+      // Remove any script tags and their content
       .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
+      // Remove other HTML tags
       .replace(/<[^>]*>/g, " ")
-      .replace(/[^\w\s.,?]/g, " ")
+      // Remove sensitive patterns
+      .replace(/password\s*=\s*["'][^"']*["']/gi, "password=[REDACTED]")
+      .replace(/api[_-]?key\s*=\s*["'][^"']*["']/gi, "api_key=[REDACTED]")
+      .replace(/token\s*=\s*["'][^"']*["']/gi, "token=[REDACTED]")
+      .replace(/secret\s*=\s*["'][^"']*["']/gi, "secret=[REDACTED]")
+      .replace(/key\s*=\s*["'][^"']*["']/gi, "key=[REDACTED]")
+      // Normalize whitespace
       .replace(/\s+/g, " ")
       .trim();
 
@@ -69,38 +83,7 @@ export class Sanitizer {
       user: this.sanitizeText(data.user, 50),
       state: this.sanitizeText(data.state, 20),
       url: this.sanitizeText(data.url, 200),
-      diff: sanitizedDiff.slice(0, 10000), // Allow longer diffs
+      diff: sanitizedDiff.slice(0, 10000), // Allow longer diffs but still limit length
     };
-  }
-
-  static sanitizePrompt(prompt: string): string {
-    // Remove any potential prompt injection markers
-    let sanitized = prompt.replace(/\[INST\]|\[\/INST\]/g, " ");
-
-    // Remove any potential system prompt markers
-    sanitized = sanitized.replace(/<\|im_start\|>|<\|im_end\|>/g, " ");
-
-    // Remove any potential role markers
-    sanitized = sanitized.replace(/<\|user\|>|<\|assistant\|>/g, " ");
-
-    // Remove any potential special characters that might cause issues
-    sanitized = sanitized.replace(/[^\w\s.,?-]/g, " ");
-
-    // Replace all whitespace sequences with a single space
-    sanitized = sanitized.replace(/\s+/g, " ");
-
-    // Trim whitespace
-    sanitized = sanitized.trim();
-
-    logger.debug(
-      {
-        originalLength: prompt.length,
-        sanitizedLength: sanitized.length,
-        context: "Sanitizer",
-      },
-      "Prompt sanitized"
-    );
-
-    return sanitized;
   }
 }

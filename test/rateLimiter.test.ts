@@ -20,12 +20,72 @@ describe("RateLimiter", () => {
   describe("RateLimitError", () => {
     it("should create error with correct properties", () => {
       const error = new RateLimitError("test", 1000, 5, 10);
-      expect(error).toBeInstanceOf(Error);
       expect(error.name).toBe("RateLimitError");
       expect(error.message).toBe("test");
-      expect(error.waitTime).toBe(1000);
-      expect(error.currentRequests).toBe(5);
-      expect(error.maxRequests).toBe(10);
+      expect(error.waitTimeMs).toBe(1000);
+      expect(error.currentRequestCount).toBe(5);
+      expect(error.maxRequestLimit).toBe(10);
+    });
+
+    it("should throw error for invalid waitTimeMs", () => {
+      expect(() => new RateLimitError("test", -1, 5, 10)).toThrow(
+        "waitTimeMs must be a non-negative number"
+      );
+      expect(() => new RateLimitError("test", "1000" as any, 5, 10)).toThrow(
+        "waitTimeMs must be a non-negative number"
+      );
+    });
+
+    it("should throw error for invalid currentRequestCount", () => {
+      expect(() => new RateLimitError("test", 1000, -1, 10)).toThrow(
+        "currentRequestCount must be a non-negative number"
+      );
+      expect(() => new RateLimitError("test", 1000, "5" as any, 10)).toThrow(
+        "currentRequestCount must be a non-negative number"
+      );
+    });
+
+    it("should throw error for invalid maxRequestLimit", () => {
+      expect(() => new RateLimitError("test", 1000, 5, 0)).toThrow(
+        "maxRequestLimit must be a positive number"
+      );
+      expect(() => new RateLimitError("test", 1000, 5, -1)).toThrow(
+        "maxRequestLimit must be a positive number"
+      );
+      expect(() => new RateLimitError("test", 1000, 5, "10" as any)).toThrow(
+        "maxRequestLimit must be a positive number"
+      );
+    });
+  });
+
+  describe("RateLimiter constructor", () => {
+    it("should throw error for invalid config", () => {
+      expect(() => new RateLimiter(null as any)).toThrow("RateLimitConfig must be an object");
+      expect(() => new RateLimiter(undefined as any)).toThrow("RateLimitConfig must be an object");
+    });
+
+    it("should throw error for invalid maxRequests", () => {
+      expect(() => new RateLimiter({ maxRequests: 0, timeWindow: 100 })).toThrow(
+        "maxRequests must be a positive number"
+      );
+      expect(() => new RateLimiter({ maxRequests: -1, timeWindow: 100 })).toThrow(
+        "maxRequests must be a positive number"
+      );
+      expect(() => new RateLimiter({ maxRequests: "2" as any, timeWindow: 100 })).toThrow(
+        "maxRequests must be a positive number"
+      );
+    });
+
+    it("should throw error for invalid timeWindow", () => {
+      expect(() => new RateLimiter({ maxRequests: 2, timeWindow: 0 })).toThrow(
+        "timeWindow must be a positive number"
+      );
+      expect(() => new RateLimiter({ maxRequests: 2, timeWindow: -1 })).toThrow(
+        "timeWindow must be a positive number"
+      );
+      expect(() => new RateLimiter({ maxRequests: 2, timeWindow: "100" as any })).toThrow(
+        "timeWindow must be a positive number"
+      );
     });
   });
 
@@ -54,10 +114,10 @@ describe("RateLimiter", () => {
         await rateLimiter.waitForSlot();
       } catch (error) {
         if (error instanceof RateLimitError) {
-          expect(error.waitTime).toBeGreaterThan(0);
-          expect(error.waitTime).toBeLessThanOrEqual(config.timeWindow);
-          expect(error.currentRequests).toBe(2);
-          expect(error.maxRequests).toBe(config.maxRequests);
+          expect(error.waitTimeMs).toBeGreaterThan(0);
+          expect(error.waitTimeMs).toBeLessThanOrEqual(config.timeWindow);
+          expect(error.currentRequestCount).toBe(2);
+          expect(error.maxRequestLimit).toBe(config.maxRequests);
         }
       }
     });
@@ -100,7 +160,7 @@ describe("RateLimiter", () => {
         await rateLimiter.waitForSlot();
       } catch (error) {
         if (error instanceof RateLimitError) {
-          expect(error.currentRequests).toBe(2);
+          expect(error.currentRequestCount).toBe(2);
         }
       }
     });
