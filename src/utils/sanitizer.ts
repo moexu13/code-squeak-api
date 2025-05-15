@@ -1,5 +1,3 @@
-import logger from "./logger";
-
 export class Sanitizer {
   static sanitizeText(text: string | null | undefined, maxLength: number = 1000): string {
     if (!text) return "";
