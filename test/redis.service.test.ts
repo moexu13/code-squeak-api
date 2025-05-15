@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { RedisService } from "../src/api/redis.service";
+import { RedisService } from "../src/api/services/redis/service";
 import Redis from "ioredis";
 
 // Mock ioredis

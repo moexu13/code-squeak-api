@@ -33,14 +33,14 @@ vi.mock("../src/utils/logger", () => ({
   },
 }));
 
-vi.mock("../src/api/github.service", () => ({
+vi.mock("../src/api/services/github/service", () => ({
   GitHubService: vi.fn(() => ({
     listPullRequests: vi.fn(),
     getPullRequest: vi.fn(),
   })),
 }));
 
-vi.mock("../src/api/claude.service", () => ({
+vi.mock("../src/api/services/claude/service", () => ({
   ClaudeService: vi.fn(() => ({
     sendMessage: vi.fn(),
     streamMessage: vi.fn(),
@@ -57,8 +57,8 @@ vi.mock("../src/utils/sanitizer", () => ({
 
 // Import after all mocks are setup
 import apiRouter from "../src/api/api.routes";
-import * as GitHubServiceModule from "../src/api/github.service";
-import * as ClaudeServiceModule from "../src/api/claude.service";
+import * as GitHubServiceModule from "../src/api/services/github/service";
+import * as ClaudeServiceModule from "../src/api/services/claude/service";
 import { Sanitizer } from "../src/utils/sanitizer";
 import * as validatorModule from "../src/utils/validator";
 

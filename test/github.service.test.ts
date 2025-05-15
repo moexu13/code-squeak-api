@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { GitHubService } from "../src/api/github.service";
+import { GitHubService } from "../src/api/services/github/service";
 import { Octokit } from "@octokit/rest";
 import {
   GitHubAuthenticationError,
@@ -90,10 +90,10 @@ describe("GitHubService", () => {
   describe("getPullRequest", () => {
     it("should handle authentication errors", async () => {
       const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
-      // Mock the first call to get the PR data
-      octokitInstance.pulls.get.mockRejectedValueOnce({ status: 401 });
-      // Mock the second call to get the diff (which won't be reached due to the error)
-      octokitInstance.pulls.get.mockRejectedValueOnce({ status: 401 });
+      // Mock both calls to get to reject with 401
+      octokitInstance.pulls.get
+        .mockRejectedValueOnce({ status: 401 })
+        .mockRejectedValueOnce({ status: 401 });
 
       await expect(githubService.getPullRequest("owner", "repo", 1)).rejects.toThrow(
         GitHubAuthenticationError
@@ -102,11 +102,17 @@ describe("GitHubService", () => {
 
     it("should handle rate limit errors", async () => {
       const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
-      octokitInstance.pulls.get.mockRejectedValueOnce({
-        status: 403,
-        message: "rate limit exceeded",
-        response: { headers: { "retry-after": "60" } },
-      });
+      octokitInstance.pulls.get
+        .mockRejectedValueOnce({
+          status: 403,
+          message: "rate limit exceeded",
+          response: { headers: { "retry-after": "60" } },
+        })
+        .mockRejectedValueOnce({
+          status: 403,
+          message: "rate limit exceeded",
+          response: { headers: { "retry-after": "60" } },
+        });
 
       await expect(githubService.getPullRequest("owner", "repo", 1)).rejects.toThrow(
         GitHubRateLimitError
@@ -115,7 +121,9 @@ describe("GitHubService", () => {
 
     it("should handle not found errors", async () => {
       const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
-      octokitInstance.pulls.get.mockRejectedValueOnce({ status: 404 });
+      octokitInstance.pulls.get
+        .mockRejectedValueOnce({ status: 404 })
+        .mockRejectedValueOnce({ status: 404 });
 
       await expect(githubService.getPullRequest("owner", "repo", 1)).rejects.toThrow(
         GitHubNotFoundError
@@ -124,10 +132,15 @@ describe("GitHubService", () => {
 
     it("should handle validation errors", async () => {
       const octokitInstance = vi.mocked(Octokit).mock.results[0].value;
-      octokitInstance.pulls.get.mockRejectedValueOnce({
-        status: 422,
-        message: "Invalid request",
-      });
+      octokitInstance.pulls.get
+        .mockRejectedValueOnce({
+          status: 422,
+          message: "Invalid request",
+        })
+        .mockRejectedValueOnce({
+          status: 422,
+          message: "Invalid request",
+        });
 
       await expect(githubService.getPullRequest("owner", "repo", 1)).rejects.toThrow(
         GitHubValidationError
