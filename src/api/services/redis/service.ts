@@ -1,22 +1,28 @@
 import Redis from "ioredis";
-import logger from "../utils/logger";
+import logger from "../../../utils/logger";
+import { getRedisConfig } from "./config";
+import { handleRedisError } from "./error-handler";
 
 export class RedisService {
   private redis: Redis;
   private static instance: RedisService | undefined;
+  private config: ReturnType<typeof getRedisConfig>;
 
   private constructor() {
-    const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-    this.redis = new Redis(redisUrl, {
+    this.config = getRedisConfig();
+    this.redis = new Redis(this.config.url, {
       retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
+        const delay = Math.min(
+          times * this.config.retryStrategy.initialDelay,
+          this.config.retryStrategy.maxDelay
+        );
         return delay;
       },
-      maxRetriesPerRequest: 3,
+      maxRetriesPerRequest: this.config.maxRetriesPerRequest,
     });
 
     this.redis.on("error", (error) => {
-      logger.error({ error }, "Redis connection error");
+      handleRedisError(error, "Redis connection");
     });
 
     this.redis.on("connect", () => {
@@ -38,7 +44,7 @@ export class RedisService {
       const parsed = JSON.parse(data);
       return parsed as T;
     } catch (error) {
-      logger.error({ error, key }, "Error getting data from Redis");
+      handleRedisError(error, `get(${key})`);
       return null;
     }
   }
@@ -52,7 +58,7 @@ export class RedisService {
         await this.redis.set(key, serialized);
       }
     } catch (error) {
-      logger.error({ error, key }, "Error setting data in Redis");
+      handleRedisError(error, `set(${key})`);
     }
   }
 
@@ -60,7 +66,7 @@ export class RedisService {
     try {
       await this.redis.del(key);
     } catch (error) {
-      logger.error({ error, key }, "Error deleting data from Redis");
+      handleRedisError(error, `delete(${key})`);
     }
   }
 
@@ -68,7 +74,7 @@ export class RedisService {
     try {
       await this.redis.flushall();
     } catch (error) {
-      logger.error({ error }, "Error clearing Redis cache");
+      handleRedisError(error, "clear");
     }
   }
 }

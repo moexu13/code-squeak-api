@@ -7,6 +7,14 @@ interface RequiredEnv {
   LOG_LEVEL?: string;
 }
 
+export interface EnvValidationResult {
+  isValid: boolean;
+  error?: {
+    message: string;
+    details?: Record<string, any>;
+  };
+}
+
 function validateRedisUrl(url: string): void {
   // First check the protocol
   if (!url.startsWith("redis://") && !url.startsWith("rediss://")) {
@@ -50,6 +58,36 @@ function validateRedisUrl(url: string): void {
   }
 }
 
+export function validateGitHubToken(token: string | undefined): EnvValidationResult {
+  if (!token) {
+    return {
+      isValid: false,
+      error: {
+        message: "GitHub token not configured",
+        details: {
+          hasProcessToken: false,
+          environment: process.env.NODE_ENV,
+        },
+      },
+    };
+  }
+
+  if (token.length < 40) {
+    return {
+      isValid: false,
+      error: {
+        message: "Invalid GitHub token configuration",
+        details: {
+          tokenLength: token.length,
+          expectedLength: ">= 40",
+        },
+      },
+    };
+  }
+
+  return { isValid: true };
+}
+
 export function validateEnv(required: RequiredEnv): void {
   const missing: string[] = [];
   const invalid: string[] = [];
@@ -61,9 +99,10 @@ export function validateEnv(required: RequiredEnv): void {
     }
   });
 
-  // Validate GitHub token length
-  if (required.GITHUB_TOKEN && required.GITHUB_TOKEN.length < 40) {
-    invalid.push("GITHUB_TOKEN (must be at least 40 characters)");
+  // Validate GitHub token
+  const githubTokenValidation = validateGitHubToken(required.GITHUB_TOKEN);
+  if (!githubTokenValidation.isValid) {
+    invalid.push(`GITHUB_TOKEN (${githubTokenValidation.error?.message})`);
   }
 
   // Validate Redis URL

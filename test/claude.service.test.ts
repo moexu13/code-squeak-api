@@ -1,19 +1,16 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { ClaudeService } from "../src/api/claude.service";
-import { RateLimiter } from "../src/utils/rateLimiter";
-import { CircuitBreaker } from "../src/utils/circuitBreaker";
+import { ClaudeService } from "../src/api/services/claude/service";
 import {
   ClaudeRateLimitError,
   ClaudeAuthenticationError,
-  ClaudeTokenLimitError,
   ClaudeTimeoutError,
-  ClaudeRequestError,
 } from "../src/utils/claudeErrors";
+import * as claudeUtils from "../src/utils/claudeUtils";
 
 // Mock the Anthropic client
 const mockClient = {
   messages: {
-    create: vi.fn().mockImplementation(async ({ messages, stream }) => {
+    create: vi.fn().mockImplementation(async ({ stream }) => {
       if (stream) {
         return {
           async *[Symbol.asyncIterator]() {
@@ -222,14 +219,8 @@ describe("ClaudeService", () => {
       // Create a fake error that will match our pattern
       const tokenLimitError = new Error("token limit exceeded for this model. max tokens: 4096");
 
-      // Directly create an instance of ClaudeTokenLimitError for comparison
-      const expectedError = new ClaudeTokenLimitError("Token limit exceeded", 4096);
-
-      // Mock the makeRequest function to throw our expected error
-      const claudeServiceAny = claudeService as any;
-
-      // Create a spy on extractMaxTokens to ensure it's called correctly
-      const extractSpy = vi.spyOn(claudeServiceAny, "extractMaxTokens");
+      // Create a spy on the actual utility function
+      const extractSpy = vi.spyOn(claudeUtils, "extractMaxTokens");
       extractSpy.mockReturnValueOnce(4096);
 
       // Mock the request to throw the error
@@ -240,8 +231,8 @@ describe("ClaudeService", () => {
         "Token limit exceeded"
       );
 
-      // Check if extraction method was called with the right message
-      expect(extractSpy).toHaveBeenCalledWith(tokenLimitError.message);
+      // Check if extraction method was called with the right message and default max tokens
+      expect(extractSpy).toHaveBeenCalledWith(tokenLimitError.message, 500);
     });
 
     it("should handle timeout errors from API", async () => {
@@ -413,17 +404,14 @@ describe("ClaudeService", () => {
   });
 
   describe("Error handling", () => {
-    // Test for the private methods using type casting to access them
     it("should extract retry-after time from error message", () => {
-      const claudeServiceAny = claudeService as any;
-      expect(claudeServiceAny.extractRetryAfter("please retry after 60 seconds")).toBe(60000);
-      expect(claudeServiceAny.extractRetryAfter("some other message")).toBeUndefined();
+      expect(claudeUtils.extractRetryAfter("please retry after 60 seconds")).toBe(60000);
+      expect(claudeUtils.extractRetryAfter("some other message")).toBeUndefined();
     });
 
     it("should extract max tokens from error message", () => {
-      const claudeServiceAny = claudeService as any;
-      expect(claudeServiceAny.extractMaxTokens("max tokens: 2000")).toBe(2000);
-      expect(claudeServiceAny.extractMaxTokens("some other message")).toBe(500); // Default from our test setup
+      expect(claudeUtils.extractMaxTokens("max tokens: 2000", 500)).toBe(2000);
+      expect(claudeUtils.extractMaxTokens("some other message", 500)).toBe(500); // Default from our test setup
     });
   });
 });

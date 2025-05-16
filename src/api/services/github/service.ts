@@ -1,20 +1,17 @@
 import { Octokit } from "@octokit/rest";
-import logger from "../utils/logger";
-import {
-  GitHubError,
-  GitHubAuthenticationError,
-  GitHubRateLimitError,
-  GitHubNotFoundError,
-  GitHubValidationError,
-} from "../utils/githubErrors";
-import { RedisService } from "./redis.service";
-import { CircuitBreaker } from "../utils/circuitBreaker";
+import { GitHubAuthenticationError } from "../../../utils/githubErrors";
+import { CircuitBreaker } from "../../../utils/circuitBreaker";
+import { getGitHubConfig } from "./config";
+import { handleGitHubError } from "./error-handler";
+import { GitHubCache } from "./cache";
+import { PullRequest } from "./types";
+import logger from "../../../utils/logger";
 
 export class GitHubService {
   private octokit: Octokit;
-  private readonly CACHE_TTL = 5 * 60; // 5 minutes in seconds
-  private redis: RedisService;
+  private cache: GitHubCache;
   private circuitBreaker: CircuitBreaker;
+  private config: ReturnType<typeof getGitHubConfig>;
 
   constructor() {
     const token = process.env.GITHUB_TOKEN;
@@ -25,43 +22,21 @@ export class GitHubService {
     this.octokit = new Octokit({
       auth: token,
     });
-    this.redis = RedisService.getInstance();
-    this.circuitBreaker = new CircuitBreaker(3, 30000); // 3 failures, 30s reset
-  }
 
-  private getCacheKey(method: string, ...args: any[]): string {
-    return `github:${method}:${args.join(":")}`;
-  }
-
-  private handleGitHubError(error: any, context: string): never {
-    logger.error({ error, context }, "GitHub API error occurred");
-
-    if (error.status === 403 && error.message?.includes("rate limit")) {
-      const retryAfter = error.response?.headers?.["retry-after"];
-      throw new GitHubRateLimitError(retryAfter ? parseInt(retryAfter) : undefined);
-    }
-
-    if (error.status === 401 || error.status === 403) {
-      throw new GitHubAuthenticationError();
-    }
-
-    if (error.status === 404) {
-      throw new GitHubNotFoundError(context);
-    }
-
-    if (error.status === 422) {
-      throw new GitHubValidationError(error.message);
-    }
-
-    throw new GitHubError(error.message || "Unexpected GitHub API error");
+    this.config = getGitHubConfig();
+    this.cache = new GitHubCache(this.config);
+    this.circuitBreaker = new CircuitBreaker(
+      this.config.circuitBreakerFailures,
+      this.config.circuitBreakerResetTime
+    );
   }
 
   async listPullRequests(owner: string, repoName: string): Promise<any[]> {
-    const cacheKey = this.getCacheKey("listPullRequests", owner, repoName);
-    const cached = await this.redis.get<any[]>(cacheKey);
+    const cacheKey = this.cache.getCacheKey("listPullRequests", owner, repoName);
+    const cached = await this.cache.get<any[]>(cacheKey);
     if (cached) return cached;
 
-    return this.circuitBreaker.execute(async () => {
+    const result = await this.circuitBreaker.execute(async () => {
       try {
         const response = await this.octokit.pulls.list({
           owner,
@@ -71,44 +46,46 @@ export class GitHubService {
           direction: "desc",
         });
 
-        await this.redis.set(cacheKey, response.data, this.CACHE_TTL);
-        return response.data;
+        if (!response.data) {
+          throw new Error("Empty response from GitHub API");
+        }
+
+        const pullRequests = response.data;
+        await this.cache.set(cacheKey, pullRequests);
+        return pullRequests;
       } catch (error) {
-        this.handleGitHubError(error, `listPullRequests(${owner}/${repoName})`);
+        handleGitHubError(error, `listPullRequests(${owner}/${repoName})`);
       }
     });
+
+    if (!result) {
+      throw new Error("Failed to fetch pull requests");
+    }
+
+    return result;
   }
 
-  async getPullRequest(
-    owner: string,
-    repoName: string,
-    pullNumber: number
-  ): Promise<{
-    title: string;
-    body: string | null;
-    user: string;
-    state: string;
-    url: string;
-    diff: string;
-  }> {
-    const cacheKey = this.getCacheKey("getPullRequest", owner, repoName, pullNumber.toString());
-    const cached = await this.redis.get<{
-      title: string;
-      body: string | null;
-      user: string;
-      state: string;
-      url: string;
-      diff: string;
-    }>(cacheKey);
+  async getPullRequest(owner: string, repoName: string, pullNumber: number): Promise<PullRequest> {
+    const cacheKey = this.cache.getCacheKey(
+      "getPullRequest",
+      owner,
+      repoName,
+      pullNumber.toString()
+    );
+    const cached = await this.cache.get<PullRequest>(cacheKey);
     if (cached) return cached;
 
-    return this.circuitBreaker.execute(async () => {
+    const result = await this.circuitBreaker.execute(async () => {
       try {
         const response = await this.octokit.pulls.get({
           owner,
           repo: repoName,
           pull_number: pullNumber,
         });
+
+        if (!response.data) {
+          throw new Error("Empty response from GitHub API");
+        }
 
         // Get the diff
         const { data: diff } = (await this.octokit.pulls.get({
@@ -120,7 +97,7 @@ export class GitHubService {
           },
         })) as unknown as { data: string };
 
-        const result = {
+        const result: PullRequest = {
           title: response.data.title,
           body: response.data.body,
           user: response.data.user?.login || "unknown",
@@ -129,12 +106,18 @@ export class GitHubService {
           diff: this.filterDiff(diff),
         };
 
-        await this.redis.set(cacheKey, result, this.CACHE_TTL);
+        await this.cache.set(cacheKey, result);
         return result;
       } catch (error) {
-        this.handleGitHubError(error, `getPullRequest(${owner}/${repoName}#${pullNumber})`);
+        handleGitHubError(error, `getPullRequest(${owner}/${repoName}#${pullNumber})`);
       }
     });
+
+    if (!result) {
+      throw new Error("Failed to fetch pull request");
+    }
+
+    return result;
   }
 
   private filterDiff(diff: string): string {
@@ -205,10 +188,7 @@ export class GitHubService {
           },
           "Failed to create pull request comment"
         );
-        this.handleGitHubError(
-          error,
-          `createPullRequestComment(${owner}/${repoName}#${pullNumber})`
-        );
+        handleGitHubError(error, `createPullRequestComment(${owner}/${repoName}#${pullNumber})`);
       }
     });
   }

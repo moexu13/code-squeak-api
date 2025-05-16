@@ -5,6 +5,7 @@ import apiRouter from "./api/api.routes";
 import { config } from "dotenv";
 import logger from "./utils/logger";
 import { validateEnv } from "./utils/env";
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 
 // Load environment variables
 config();
@@ -41,7 +42,9 @@ if (import.meta.env.DEV) {
 export { app };
 
 // Export the handler for AWS Lambda
-export const handler = handle(app);
+export const handler = handle(app) as unknown as (
+  event: APIGatewayProxyEvent
+) => Promise<APIGatewayProxyResult>;
 
 // Add default export for Vite dev server
 export default app;
