@@ -1,10 +1,9 @@
 import { Context } from "hono";
 import { GitHubService } from "../services/github/service";
-import { ClaudeService } from "../services/claude/service";
-import { Sanitizer } from "../../utils/sanitizer";
+import { COMMENT_HEADER } from "../types";
 import logger from "../../utils/logger";
 import { createSuccessResponse } from "../utils/response";
-import { DEFAULT_REVIEW_PROMPT, COMMENT_HEADER } from "../types";
+import { analyzePullRequest } from "../services/pull-request/analyzer";
 
 export const listPullRequests = async (c: Context) => {
   const { owner, repoName } = c.req.param();
@@ -33,62 +32,16 @@ export const listPullRequests = async (c: Context) => {
   return c.json(createSuccessResponse({ pullRequests }));
 };
 
-export const analyzePullRequest = async (c: Context) => {
+export const analyzePullRequestHandler = async (c: Context) => {
   const { owner, repoName, pullNumber } = c.req.param();
-  logger.info(
-    {
-      owner,
-      repoName,
-      pullNumber,
-      context: "API Routes",
-    },
-    "Analyzing pull request"
-  );
-
-  const githubService = new GitHubService();
-  const claudeService = new ClaudeService();
 
   try {
-    const pullRequestData = await githubService.getPullRequest(
-      owner,
-      repoName,
-      parseInt(pullNumber)
-    );
-
-    // Sanitize pull request data
-    const sanitizedPullRequest = Sanitizer.sanitizePullRequestData(pullRequestData);
-
-    const formattedPrompt = DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedPullRequest.title)
-      .replace("{description}", sanitizedPullRequest.body || "")
-      .replace("{author}", sanitizedPullRequest.user)
-      .replace("{state}", sanitizedPullRequest.state)
-      .replace("{url}", sanitizedPullRequest.url)
-      .replace("{diff}", sanitizedPullRequest.diff);
-
-    const analysisResult = await claudeService.sendMessage(formattedPrompt, {
+    const result = await analyzePullRequest(owner, repoName, parseInt(pullNumber), {
       maxTokens: 1000,
       temperature: 0.7,
     });
 
-    logger.debug(
-      {
-        owner,
-        repoName,
-        pullNumber,
-        context: "API Routes",
-      },
-      "Successfully analyzed pull request"
-    );
-
-    return c.json(
-      createSuccessResponse({
-        pullRequest: {
-          ...sanitizedPullRequest,
-          diff: undefined, // Remove the diff from the response
-        },
-        analysis: analysisResult,
-      })
-    );
+    return c.json(createSuccessResponse(result));
   } catch (error) {
     logger.error(
       {
@@ -108,9 +61,6 @@ export const analyzeAndCommentPullRequest = async (c: Context) => {
   const { owner, repoName, pullNumber } = c.req.param();
   const requestBody = c.get("validatedBody");
   const shouldPostComment = requestBody.postComment !== false;
-  const customPrompt = requestBody.prompt;
-  const maxTokens = requestBody.maxTokens;
-  const temperature = requestBody.temperature;
 
   logger.info(
     {
@@ -118,50 +68,30 @@ export const analyzeAndCommentPullRequest = async (c: Context) => {
       repoName,
       pullNumber,
       shouldPostComment,
-      hasCustomPrompt: !!customPrompt,
-      maxTokens,
-      temperature,
+      hasCustomPrompt: !!requestBody.prompt,
+      maxTokens: requestBody.maxTokens,
+      temperature: requestBody.temperature,
       context: "API Routes",
     },
     "Starting pull request analysis and comment"
   );
 
   try {
-    const githubService = new GitHubService();
-    const claudeService = new ClaudeService();
-
-    // Get pull request data
-    const pullRequestData = await githubService.getPullRequest(
-      owner,
-      repoName,
-      parseInt(pullNumber)
-    );
-
-    // Sanitize the data
-    const sanitizedPullRequest = Sanitizer.sanitizePullRequestData(pullRequestData);
-    const formattedPrompt = customPrompt
-      ? Sanitizer.sanitizePrompt(customPrompt)
-      : DEFAULT_REVIEW_PROMPT.replace("{title}", sanitizedPullRequest.title)
-          .replace("{description}", sanitizedPullRequest.body || "")
-          .replace("{author}", sanitizedPullRequest.user)
-          .replace("{state}", sanitizedPullRequest.state)
-          .replace("{url}", sanitizedPullRequest.url)
-          .replace("{diff}", sanitizedPullRequest.diff);
-
-    // Get analysis from Claude
-    const analysisResult = await claudeService.sendMessage(formattedPrompt, {
-      maxTokens,
-      temperature,
+    const result = await analyzePullRequest(owner, repoName, parseInt(pullNumber), {
+      customPrompt: requestBody.prompt,
+      maxTokens: requestBody.maxTokens,
+      temperature: requestBody.temperature,
     });
 
     // Post comment to the PR if requested
     if (shouldPostComment) {
       try {
+        const githubService = new GitHubService();
         await githubService.createPullRequestComment(
           owner,
           repoName,
           parseInt(pullNumber),
-          `${COMMENT_HEADER}\n\n${analysisResult}`
+          `${COMMENT_HEADER}\n\n${result.analysis}`
         );
 
         logger.info(

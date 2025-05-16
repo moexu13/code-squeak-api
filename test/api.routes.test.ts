@@ -314,8 +314,11 @@ describe("API Routes", () => {
       expect(body).toEqual({
         success: true,
         pullRequest: {
-          ...mockSanitizedPR,
-          diff: undefined,
+          title: mockSanitizedPR.title,
+          body: mockSanitizedPR.body,
+          user: mockSanitizedPR.user,
+          state: mockSanitizedPR.state,
+          url: mockSanitizedPR.url,
         },
         analysis: mockAnalysis,
       });

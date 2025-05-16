@@ -8,7 +8,7 @@ import {
 import { createSuccessResponse } from "./utils/response";
 import {
   listPullRequests,
-  analyzePullRequest,
+  analyzePullRequestHandler,
   analyzeAndCommentPullRequest,
 } from "./routes/pull-requests";
 import logger from "../utils/logger";
@@ -26,7 +26,11 @@ apiRouter.get("/", (c) => {
 
 apiRouter.get("/:owner/:repoName", validateParams, listPullRequests);
 
-apiRouter.get("/:owner/:repoName/pull/:pullNumber/analyze", validateParams, analyzePullRequest);
+apiRouter.get(
+  "/:owner/:repoName/pull/:pullNumber/analyze",
+  validateParams,
+  analyzePullRequestHandler
+);
 
 apiRouter.post(
   "/:owner/:repoName/pull/:pullNumber/analyze-and-comment",
