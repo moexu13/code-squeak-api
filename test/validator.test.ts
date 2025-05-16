@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   validateOwner,
   validateRepo,
@@ -9,30 +9,32 @@ import {
 describe("Validator", () => {
   describe("validateOwner", () => {
     it("should accept valid owner names", () => {
-      const validOwners = ["user123", "org-name", "test", "a1b2c3"];
+      const validOwners = ["user123", "test-org", "org-name", "user123"];
       validOwners.forEach((owner) => {
-        expect(() => validateOwner(owner)).not.toThrow();
+        const result = validateOwner(owner);
+        expect(result.isValid).toBe(true);
       });
     });
 
     it("should reject empty owner names", () => {
-      expect(() => validateOwner("")).toThrow(ValidationError);
-      expect(() => validateOwner("")).toThrow("Owner parameter is required");
+      const result = validateOwner("");
+      expect(result.isValid).toBe(false);
+      expect(result.error?.message).toBe("Owner parameter is required");
     });
 
     it("should reject owner names that are too long", () => {
       const longOwner = "a".repeat(40);
-      expect(() => validateOwner(longOwner)).toThrow(ValidationError);
-      expect(() => validateOwner(longOwner)).toThrow(
-        "Owner parameter must be 39 characters or less"
-      );
+      const result = validateOwner(longOwner);
+      expect(result.isValid).toBe(false);
+      expect(result.error?.message).toBe("Owner parameter must be 39 characters or less");
     });
 
     it("should reject owner names with invalid characters", () => {
       const invalidOwners = ["user@123", "test_name", "org.name", "user space"];
       invalidOwners.forEach((owner) => {
-        expect(() => validateOwner(owner)).toThrow(ValidationError);
-        expect(() => validateOwner(owner)).toThrow(
+        const result = validateOwner(owner);
+        expect(result.isValid).toBe(false);
+        expect(result.error?.message).toBe(
           "Owner parameter can only contain alphanumeric characters and hyphens"
         );
       });
@@ -41,30 +43,32 @@ describe("Validator", () => {
 
   describe("validateRepo", () => {
     it("should accept valid repository names", () => {
-      const validRepos = ["repo123", "test-repo", "my_project", "test.project", "repo-123_test.js"];
+      const validRepos = ["repo-123", "test.repo", "repo_name", "repo123"];
       validRepos.forEach((repo) => {
-        expect(() => validateRepo(repo)).not.toThrow();
+        const result = validateRepo(repo);
+        expect(result.isValid).toBe(true);
       });
     });
 
     it("should reject empty repository names", () => {
-      expect(() => validateRepo("")).toThrow(ValidationError);
-      expect(() => validateRepo("")).toThrow("Repository parameter is required");
+      const result = validateRepo("");
+      expect(result.isValid).toBe(false);
+      expect(result.error?.message).toBe("Repository parameter is required");
     });
 
     it("should reject repository names that are too long", () => {
       const longRepo = "a".repeat(101);
-      expect(() => validateRepo(longRepo)).toThrow(ValidationError);
-      expect(() => validateRepo(longRepo)).toThrow(
-        "Repository parameter must be 100 characters or less"
-      );
+      const result = validateRepo(longRepo);
+      expect(result.isValid).toBe(false);
+      expect(result.error?.message).toBe("Repository parameter must be 100 characters or less");
     });
 
     it("should reject repository names with invalid characters", () => {
       const invalidRepos = ["repo@123", "test repo", "repo#name", "test/repo"];
       invalidRepos.forEach((repo) => {
-        expect(() => validateRepo(repo)).toThrow(ValidationError);
-        expect(() => validateRepo(repo)).toThrow(
+        const result = validateRepo(repo);
+        expect(result.isValid).toBe(false);
+        expect(result.error?.message).toBe(
           "Repository parameter can only contain alphanumeric characters, hyphens, underscores, and periods"
         );
       });
@@ -72,54 +76,67 @@ describe("Validator", () => {
   });
 
   describe("validatePullRequestParams middleware", () => {
-    it("should call next() for valid parameters", async () => {
-      const mockContext = {
-        req: {
-          param: () => ({ owner: "validuser", repoName: "valid-repo" }),
-        },
-        json: vi.fn(),
-      };
-      const mockNext = vi.fn();
+    let mockContext: any;
+    let mockNext: any;
+    let mockJson: any;
 
-      await validatePullRequestParams(mockContext as any, mockNext);
-      expect(mockNext).toHaveBeenCalled();
-    });
-
-    it("should return 400 error for invalid owner", async () => {
-      const mockJson = vi.fn();
-      const mockContext = {
+    beforeEach(() => {
+      mockJson = vi.fn();
+      mockNext = vi.fn();
+      mockContext = {
         req: {
-          param: () => ({ owner: "invalid@user", repoName: "valid-repo" }),
+          param: vi.fn(),
         },
         json: mockJson,
       };
-      const mockNext = vi.fn();
+    });
 
-      await validatePullRequestParams(mockContext as any, mockNext);
+    it("should call next() for valid parameters", async () => {
+      mockContext.req.param.mockReturnValue({
+        owner: "valid-owner",
+        repoName: "valid-repo",
+        pullNumber: "123",
+      });
+
+      await validatePullRequestParams(mockContext, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockJson).not.toHaveBeenCalled();
+    });
+
+    it("should return 400 error for invalid owner", async () => {
+      mockContext.req.param.mockReturnValue({
+        owner: "invalid@owner",
+        repoName: "valid-repo",
+        pullNumber: "123",
+      });
+
+      await validatePullRequestParams(mockContext, mockNext);
 
       expect(mockJson).toHaveBeenCalledWith(
-        { error: "Owner parameter can only contain alphanumeric characters and hyphens" },
+        {
+          error: "Owner parameter can only contain alphanumeric characters and hyphens",
+          success: false,
+        },
         400
       );
       expect(mockNext).not.toHaveBeenCalled();
     });
 
     it("should return 400 error for invalid repository", async () => {
-      const mockJson = vi.fn();
-      const mockContext = {
-        req: {
-          param: () => ({ owner: "validuser", repoName: "invalid@repo" }),
-        },
-        json: mockJson,
-      };
-      const mockNext = vi.fn();
+      mockContext.req.param.mockReturnValue({
+        owner: "valid-owner",
+        repoName: "invalid@repo",
+        pullNumber: "123",
+      });
 
-      await validatePullRequestParams(mockContext as any, mockNext);
+      await validatePullRequestParams(mockContext, mockNext);
 
       expect(mockJson).toHaveBeenCalledWith(
         {
           error:
             "Repository parameter can only contain alphanumeric characters, hyphens, underscores, and periods",
+          success: false,
         },
         400
       );
@@ -127,21 +144,14 @@ describe("Validator", () => {
     });
 
     it("should propagate unexpected errors", async () => {
-      const unexpectedError = new Error("Unexpected error");
-      const mockContext = {
-        req: {
-          param: () => {
-            throw unexpectedError;
-          },
-        },
-        json: vi.fn(),
-      };
-      const mockNext = vi.fn();
+      const error = new Error("Unexpected error");
+      mockContext.req.param.mockImplementation(() => {
+        throw error;
+      });
 
-      await expect(validatePullRequestParams(mockContext as any, mockNext)).rejects.toThrow(
-        unexpectedError
-      );
+      await expect(validatePullRequestParams(mockContext, mockNext)).rejects.toThrow(error);
       expect(mockNext).not.toHaveBeenCalled();
+      expect(mockJson).not.toHaveBeenCalled();
     });
   });
 });

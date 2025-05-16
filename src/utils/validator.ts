@@ -1,7 +1,7 @@
 import { Context, Next } from "hono";
 import { createErrorResponse } from "../api/utils/response";
 import logger from "./logger.js";
-import { validateGitHubToken, EnvValidationResult } from "./env";
+import { validateGitHubToken } from "./env";
 
 export class ValidationError extends Error {
   constructor(message: string) {
