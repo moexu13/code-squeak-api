@@ -1,5 +1,6 @@
 import { Context, Next } from "hono";
 import { validatePullRequestParams } from "../../utils/validator";
+import { validateGitHubToken } from "../../utils/env";
 import logger from "../../utils/logger";
 
 export const validateParams = async (c: Context, next: Next) => {
@@ -69,54 +70,20 @@ export const validateAnalyzeAndCommentBody = async (c: Context, next: Next) => {
 
 export const injectEnvironmentVariables = async (c: Context, next: Next) => {
   const githubToken = process.env.GITHUB_TOKEN;
+  const validation = validateGitHubToken(githubToken);
 
-  logger.debug(
-    {
-      hasProcessToken: !!process.env.GITHUB_TOKEN,
-      tokenLength: githubToken?.length,
-      environment: process.env.NODE_ENV,
-      context: "API Middleware",
-    },
-    "Checking GitHub token"
-  );
-
-  if (!githubToken) {
+  if (!validation.isValid) {
     logger.error(
       {
-        hasProcessToken: false,
-        environment: process.env.NODE_ENV,
+        ...validation.error?.details,
         context: "API Middleware",
       },
-      "GitHub token not found in environment variables"
+      validation.error?.message || "GitHub token validation failed"
     );
     return c.json(
       {
-        error: "GitHub token not configured",
-        details: {
-          hasProcessToken: false,
-          environment: process.env.NODE_ENV,
-        },
-      },
-      500
-    );
-  }
-
-  if (githubToken.length < 40) {
-    logger.error(
-      {
-        tokenLength: githubToken.length,
-        expectedLength: ">= 40",
-        context: "API Middleware",
-      },
-      "GitHub token appears to be invalid (too short)"
-    );
-    return c.json(
-      {
-        error: "Invalid GitHub token configuration",
-        details: {
-          tokenLength: githubToken.length,
-          expectedLength: ">= 40",
-        },
+        error: validation.error?.message,
+        details: validation.error?.details,
       },
       500
     );
