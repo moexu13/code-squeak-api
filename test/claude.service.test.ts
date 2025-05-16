@@ -3,7 +3,6 @@ import { ClaudeService } from "../src/api/services/claude/service";
 import {
   ClaudeRateLimitError,
   ClaudeAuthenticationError,
-  ClaudeTokenLimitError,
   ClaudeTimeoutError,
 } from "../src/utils/claudeErrors";
 import * as claudeUtils from "../src/utils/claudeUtils";

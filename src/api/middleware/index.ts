@@ -1,7 +1,6 @@
 import { Context, Next } from "hono";
 import { validatePullRequestParams } from "../../utils/validator";
 import logger from "../../utils/logger";
-import { AnalyzeAndCommentRequestBody } from "../types";
 
 export const validateParams = async (c: Context, next: Next) => {
   const startTime = Date.now();

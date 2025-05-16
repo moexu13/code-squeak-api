@@ -9,7 +9,6 @@ import { CircuitBreaker } from "../../../utils/circuitBreaker";
 import { getClaudeConfig } from "./config";
 import { handleClaudeError } from "./error-handler";
 import { ClaudeConfig, MessageOptions } from "./types";
-import logger from "../../../utils/logger";
 
 export class ClaudeService {
   private anthropic: Anthropic;
