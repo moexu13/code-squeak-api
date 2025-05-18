@@ -29,4 +29,10 @@ export default defineConfig({
     // Silent by default, change to false if you want more verbose output
     silent: false,
   },
+  optimizeDeps: {
+    exclude: ["fsevents"],
+  },
+  ssr: {
+    noExternal: ["fsevents"],
+  },
 });
