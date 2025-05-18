@@ -1,0 +1,24 @@
+{
+  "name": "code-squeak-api",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "vite build",
+    "start": "node dist/server.js",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.2",
+    "nodemon": "^3.1.10",
+    "vite": "^6.3.3"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vite-express": "*",
+    "vitest": "^3.1.3"
+  }
+}
