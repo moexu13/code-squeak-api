@@ -1,12 +1,24 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express, { RequestHandler } from "express";
 import notFound from "../src/errors/notFound";
 import methodNotAllowed from "../src/errors/methodNotAllowed";
 import errorHandler from "../src/errors/errorHandler";
+import logger from "../src/utils/logger";
+
+// Mock the logger
+vi.mock("../src/utils/logger", () => ({
+  default: {
+    error: vi.fn(),
+  },
+}));
 
 describe("Error Handlers", () => {
   const app = express();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   // Test routes
   const testHandler: RequestHandler = (_req, res, next) => {
@@ -24,7 +36,14 @@ describe("Error Handlers", () => {
     const response = await request(app).get("/non-existent").expect(404);
 
     expect(response.body).toHaveProperty("error");
-    expect(response.body.error).toContain("Not found");
+    expect(response.body.error).toBe("Something went wrong");
+    expect(logger.error).toHaveBeenCalledWith({
+      msg: "Express error occurred",
+      error: expect.objectContaining({
+        name: "NotFoundError",
+        message: expect.stringContaining("Not found"),
+      }),
+    });
   });
 
   it("should return 405 for method not allowed", async () => {
@@ -36,7 +55,14 @@ describe("Error Handlers", () => {
     const response = await request(app).post("/test").expect(405);
 
     expect(response.body).toHaveProperty("error");
-    expect(response.body.error).toContain("not allowed");
+    expect(response.body.error).toBe("Something went wrong");
+    expect(logger.error).toHaveBeenCalledWith({
+      msg: "Express error occurred",
+      error: expect.objectContaining({
+        name: "MethodNotAllowedError",
+        message: expect.stringContaining("not allowed"),
+      }),
+    });
   });
 
   it("should handle internal server errors", async () => {
@@ -49,7 +75,14 @@ describe("Error Handlers", () => {
     const response = await request(app).get("/error").expect(500);
 
     expect(response.body).toHaveProperty("error");
-    expect(response.body.error).toBe("Test error");
+    expect(response.body.error).toBe("Something went wrong");
+    expect(logger.error).toHaveBeenCalledWith({
+      msg: "Express error occurred",
+      error: expect.objectContaining({
+        name: "Error",
+        message: "Test error",
+      }),
+    });
   });
 
   it("should include stack trace in development", async () => {
@@ -62,7 +95,16 @@ describe("Error Handlers", () => {
 
     const response = await request(app).get("/error").expect(500);
 
-    expect(response.body).toHaveProperty("stack");
+    expect(response.body).toHaveProperty("error");
+    expect(response.body.error).toBe("Something went wrong");
+    expect(logger.error).toHaveBeenCalledWith({
+      msg: "Express error occurred",
+      error: expect.objectContaining({
+        name: "Error",
+        message: "Test error",
+        stack: expect.any(String),
+      }),
+    });
     process.env.NODE_ENV = "test";
   });
 });

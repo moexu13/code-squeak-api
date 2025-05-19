@@ -2,6 +2,8 @@
  * Express API error handler.
  */
 import { Request, Response, NextFunction } from "express";
+import logger from "../utils/logger";
+import { createSanitizedError } from "../utils/errorUtils";
 
 interface ErrorResponse {
   error: string;
@@ -11,24 +13,25 @@ interface ErrorResponse {
 
 function errorHandler(
   err: Error & { status?: number },
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ) {
-  console.error(err);
+  const sanitizedError = createSanitizedError(err, req);
+
+  // Log the full error details for debugging
+  logger.error({
+    msg: "Express error occurred",
+    error: sanitizedError,
+  });
 
   const status = err.status || 500;
-  const message = err.message || "Something went wrong!";
 
+  // Return a sanitized response to the client
   const response: ErrorResponse = {
-    error: message,
+    error: "Something went wrong",
     status,
   };
-
-  // Only include stack trace in development
-  if (process.env.NODE_ENV === "development") {
-    response.stack = err.stack;
-  }
 
   res.status(status).json(response);
 }
