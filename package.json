@@ -9,20 +9,20 @@
     "test": "vitest"
   },
   "devDependencies": {
-    "@types/express": "^5.0.1",
+    "@types/express": "^5.0.2",
     "@types/http-errors": "^2.0.4",
-    "@types/node": "^22.15.2",
+    "@types/node": "^22.15.19",
     "@types/supertest": "^6.0.3",
     "supertest": "^7.1.1",
-    "vite": "^6.3.3"
+    "vite": "^6.3.5"
   },
   "dependencies": {
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "http-errors": "^2.0.0",
-    "tsx": "^4.19.3",
+    "tsx": "^4.19.4",
     "typescript": "^5.8.3",
-    "vite-express": "*",
+    "vite-express": "^0.21.1",
     "vitest": "^3.1.3"
   }
 }
