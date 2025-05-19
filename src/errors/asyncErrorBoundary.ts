@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from "express";
+import logger from "../utils/logger";
+import { createSanitizedError } from "../utils/errorUtils";
 
 type AsyncFunction = (
   req: Request,
@@ -15,7 +17,13 @@ function asyncErrorBoundary(fn: AsyncFunction) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       await fn(req, res, next);
-    } catch (error) {
+    } catch (error: unknown) {
+      // Log the sanitized error
+      logger.error({
+        msg: "Async operation failed",
+        error: createSanitizedError(error, req),
+      });
+
       next(error);
     }
   };
