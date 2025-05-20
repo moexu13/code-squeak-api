@@ -1,22 +1,11 @@
 import dotenv from "dotenv";
-import path from "path";
-
-// Debug the current working directory and .env path
-console.log("Current working directory:", process.cwd());
-console.log("Looking for .env at:", path.resolve(process.cwd(), ".env"));
+import logger from "../utils/logger";
 
 // Load environment variables
 const result = dotenv.config();
 if (result.error) {
-  console.error("Error loading .env file:", result.error);
+  logger.error({ error: result.error }, "Error loading .env file");
 }
-
-// Debug logging
-console.log("Environment variables loaded:", {
-  UNKEY_ROOT_KEY: process.env.UNKEY_ROOT_KEY ? "set" : "not set",
-  UNKEY_API_ID: process.env.UNKEY_API_ID ? "set" : "not set",
-  NODE_ENV: process.env.NODE_ENV,
-});
 
 // Configuration interface
 interface Config {
