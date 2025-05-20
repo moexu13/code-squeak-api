@@ -44,8 +44,8 @@ export const config: Config = {
     isProduction: process.env.NODE_ENV === "production",
   },
   unkey: {
-    rootKey: process.env.UNKEY_ROOT_KEY!,
-    apiId: process.env.UNKEY_API_ID!,
+    rootKey: process.env.UNKEY_ROOT_KEY as string,
+    apiId: process.env.UNKEY_API_ID as string,
   },
   server: {
     port: parseInt(process.env.PORT || "3000", 10),
