@@ -6,7 +6,7 @@ import logger from "../utils/logger";
 import { config } from "../config/env";
 import { createSanitizedError } from "../utils/errorUtils";
 
-export default function errorHandler(
+function errorHandler(
   err: Error & { status?: number },
   req: Request,
   res: Response,
@@ -21,8 +21,8 @@ export default function errorHandler(
     error: sanitizedError,
   });
 
-  // Only report to Sentry if not in test environment
-  if (!config.env.isTest) {
+  // Only report to Sentry in production
+  if (config.env.isProduction) {
     import("@sentry/node").then((Sentry) => {
       Sentry.captureException(err, {
         extra: {
@@ -41,3 +41,5 @@ export default function errorHandler(
     message: config.env.isDevelopment ? sanitizedError.message : undefined,
   });
 }
+
+export default errorHandler;
