@@ -3,13 +3,8 @@
  */
 import { Request, Response, NextFunction } from "express";
 import logger from "../utils/logger";
+import { config } from "../config/env";
 import { createSanitizedError } from "../utils/errorUtils";
-
-interface ErrorResponse {
-  error: string;
-  status?: number;
-  stack?: string;
-}
 
 function errorHandler(
   err: Error & { status?: number },
@@ -17,23 +12,34 @@ function errorHandler(
   res: Response,
   _next: NextFunction
 ) {
+  // Create sanitized error object
   const sanitizedError = createSanitizedError(err, req);
 
-  // Log the full error details for debugging
+  // Log the sanitized error
   logger.error({
-    msg: "Express error occurred",
+    message: "Express error occurred",
     error: sanitizedError,
   });
 
+  // Only report to Sentry in production
+  if (config.env.isProduction) {
+    import("@sentry/node").then((Sentry) => {
+      Sentry.captureException(err, {
+        extra: {
+          request: sanitizedError.request,
+        },
+      });
+    });
+  }
+
+  // Get status code from error or default to 500
   const status = err.status || 500;
 
-  // Return a sanitized response to the client
-  const response: ErrorResponse = {
+  // Handle errors
+  res.status(status).json({
     error: "Something went wrong",
-    status,
-  };
-
-  res.status(status).json(response);
+    message: config.env.isDevelopment ? sanitizedError.message : undefined,
+  });
 }
 
 export default errorHandler;

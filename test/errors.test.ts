@@ -38,7 +38,7 @@ describe("Error Handlers", () => {
     expect(response.body).toHaveProperty("error");
     expect(response.body.error).toBe("Something went wrong");
     expect(logger.error).toHaveBeenCalledWith({
-      msg: "Express error occurred",
+      message: "Express error occurred",
       error: expect.objectContaining({
         name: "NotFoundError",
         message: expect.stringContaining("Not found"),
@@ -57,7 +57,7 @@ describe("Error Handlers", () => {
     expect(response.body).toHaveProperty("error");
     expect(response.body.error).toBe("Something went wrong");
     expect(logger.error).toHaveBeenCalledWith({
-      msg: "Express error occurred",
+      message: "Express error occurred",
       error: expect.objectContaining({
         name: "MethodNotAllowedError",
         message: expect.stringContaining("not allowed"),
@@ -77,7 +77,7 @@ describe("Error Handlers", () => {
     expect(response.body).toHaveProperty("error");
     expect(response.body.error).toBe("Something went wrong");
     expect(logger.error).toHaveBeenCalledWith({
-      msg: "Express error occurred",
+      message: "Express error occurred",
       error: expect.objectContaining({
         name: "Error",
         message: "Test error",
@@ -98,7 +98,7 @@ describe("Error Handlers", () => {
     expect(response.body).toHaveProperty("error");
     expect(response.body.error).toBe("Something went wrong");
     expect(logger.error).toHaveBeenCalledWith({
-      msg: "Express error occurred",
+      message: "Express error occurred",
       error: expect.objectContaining({
         name: "Error",
         message: "Test error",
