@@ -22,16 +22,16 @@ const app = express();
 
 app.use(express.json());
 
-// Root route doesn't need auth
+// Allow access to the root route
 app.get("/", (_, res) => {
   res.send("Code Squeak API");
 });
 
-// Every other endpoint needs auth
+// All other routes require an API key
 app.use("/api/v1", authMiddleware);
 app.use("/api/v1/code-analysis", analysisRouter);
 
-// Error handling should be last
+// And if there are problems handle them here
 app.use(notFound);
 app.use(errorHandler);
 
