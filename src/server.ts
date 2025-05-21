@@ -22,12 +22,12 @@ const app = express();
 
 app.use(express.json());
 
-// Root route should be first
+// Root route doesn't need auth
 app.get("/", (_, res) => {
   res.send("Code Squeak API");
 });
 
-// API routes with auth
+// Every other endpoint needs auth
 app.use("/api/v1", authMiddleware);
 app.use("/api/v1/code-analysis", analysisRouter);
 
