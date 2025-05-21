@@ -3,37 +3,33 @@
  */
 import { Request, Response, NextFunction } from "express";
 import logger from "../utils/logger";
-import { createSanitizedError } from "../utils/errorUtils";
+import { config } from "../config/env";
 
-interface ErrorResponse {
-  error: string;
-  status?: number;
-  stack?: string;
-}
-
-function errorHandler(
+export default function errorHandler(
   err: Error & { status?: number },
-  req: Request,
+  _req: Request,
   res: Response,
   _next: NextFunction
 ) {
-  const sanitizedError = createSanitizedError(err, req);
-
-  // Log the full error details for debugging
+  // Log the error
   logger.error({
-    msg: "Express error occurred",
-    error: sanitizedError,
+    message: "Express error occurred",
+    error: err,
   });
 
+  // Only report to Sentry if not in test environment
+  if (!config.env.isTest) {
+    import("@sentry/node").then((Sentry) => {
+      Sentry.captureException(err);
+    });
+  }
+
+  // Get status code from error or default to 500
   const status = err.status || 500;
 
-  // Return a sanitized response to the client
-  const response: ErrorResponse = {
+  // Handle errors
+  res.status(status).json({
     error: "Something went wrong",
-    status,
-  };
-
-  res.status(status).json(response);
+    message: config.env.isDevelopment ? err.message : undefined,
+  });
 }
-
-export default errorHandler;

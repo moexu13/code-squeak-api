@@ -4,7 +4,7 @@ import logger from "../utils/logger";
 // Load environment variables
 const result = dotenv.config();
 if (result.error) {
-  logger.error({ error: result.error }, "Error loading .env file");
+  logger.error({ message: "Error loading .env file", error: result.error });
 }
 
 // Configuration interface
@@ -24,10 +24,19 @@ interface Config {
     host: string;
   };
   debug: boolean;
+  sentry: {
+    dsn: string;
+    environment: string;
+  };
 }
 
 // Validate required environment variables
-const requiredEnvVars = ["NODE_ENV", "UNKEY_ROOT_KEY", "UNKEY_API_ID"] as const;
+const requiredEnvVars = [
+  "NODE_ENV",
+  "UNKEY_ROOT_KEY",
+  "UNKEY_API_ID",
+  "SENTRY_DSN",
+] as const;
 
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
@@ -52,6 +61,10 @@ export const config: Config = {
     host: process.env.HOST || "localhost",
   },
   debug: process.env.DEBUG === "true",
+  sentry: {
+    dsn: process.env.SENTRY_DSN as string,
+    environment: process.env.NODE_ENV || "development",
+  },
 } as const;
 
 // Type-safe config access

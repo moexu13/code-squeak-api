@@ -26,7 +26,7 @@ const authMiddleware = (async (
   const key = req.headers["authorization"]?.split(" ").at(1);
   if (!key) {
     logger.error({
-      msg: "Unauthorized: Missing API key",
+      message: "Unauthorized: Missing API key",
       path: req.originalUrl,
       method: req.method,
     });
@@ -39,7 +39,7 @@ const authMiddleware = (async (
   });
   if (error || !result.valid) {
     logger.error({
-      msg: "Unauthorized: Invalid API key",
+      message: "Unauthorized: Invalid API key",
       error,
       path: req.originalUrl,
       method: req.method,
