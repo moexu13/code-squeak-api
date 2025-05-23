@@ -1,5 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import logger from "../../utils/logger";
+import { GitHubError } from "../../errors/github";
 
 interface Repository {
   id: number;
@@ -26,16 +27,6 @@ interface PullRequest {
   created_at: string;
   updated_at: string;
   body_preview: string | null;
-}
-
-class GitHubError extends Error {
-  constructor(
-    message: string,
-    public readonly context?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = "GitHubError";
-  }
 }
 
 export async function list(owner: string): Promise<Repository[]> {
