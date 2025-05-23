@@ -1,33 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import logger from "../../utils/logger";
 import { GitHubError } from "../../errors/github";
-
-interface Repository {
-  id: number;
-  name: string;
-  full_name: string;
-  description: string | null;
-  html_url: string;
-  updated_at: string;
-  stargazers_count: number;
-  language: string | null;
-}
-
-interface PullRequest {
-  id: number;
-  html_url: string;
-  title: string;
-  number: number;
-  user: {
-    login: string;
-  };
-  comments: number;
-  additions: number;
-  deletions: number;
-  created_at: string;
-  updated_at: string;
-  body_preview: string | null;
-}
+import { Repository, PullRequest } from "./github.types";
 
 export async function list(owner: string): Promise<Repository[]> {
   const octokit = new Octokit();
