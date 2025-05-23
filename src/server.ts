@@ -14,6 +14,7 @@ import ViteExpress from "vite-express";
 import logger from "./utils/logger";
 
 import analysisRouter from "./api/analysis/analysis.router";
+import githubRouter from "./api/github/github.routes";
 import errorHandler from "./errors/errorHandler";
 import notFound from "./errors/notFound";
 import authMiddleware from "./middleware/auth";
@@ -29,6 +30,7 @@ app.get("/", (_, res) => {
 
 // All other routes require an API key
 app.use("/api/v1", authMiddleware);
+app.use("/api/v1/github", githubRouter);
 app.use("/api/v1/code-analysis", analysisRouter);
 
 // And if there are problems handle them here
