@@ -1,26 +1,52 @@
 import { Octokit } from "@octokit/rest";
 import logger from "../../utils/logger";
 import { GitHubError } from "../../errors/github";
-import { Repository, PullRequest } from "./github.types";
+import {
+  Repository,
+  PullRequest,
+  PaginationParams,
+  PaginatedResponse,
+} from "./github.types";
 
-export async function list(owner: string): Promise<Repository[]> {
+export async function list(
+  owner: string,
+  { page = 1, per_page = 10 }: PaginationParams = {}
+): Promise<PaginatedResponse<Repository>> {
   const octokit = new Octokit();
   const response = await octokit.repos.listForUser({
     username: owner,
-    per_page: 10,
+    page,
+    per_page,
     sort: "updated",
   });
 
-  return response.data.map((repo) => ({
-    id: repo.id,
-    name: repo.name,
-    full_name: repo.full_name,
-    description: repo.description ?? null,
-    html_url: repo.html_url,
-    updated_at: repo.updated_at ?? new Date().toISOString(),
-    stargazers_count: repo.stargazers_count ?? 0,
-    language: repo.language ?? null,
-  }));
+  // Get total count from the Link header if available
+  const totalCount = parseInt(
+    response.headers.link?.match(/page=(\d+)>; rel="last"/)?.[1] ?? "1",
+    10
+  );
+  const totalPages = Math.ceil(totalCount / per_page);
+
+  return {
+    data: response.data.map((repo) => ({
+      id: repo.id,
+      name: repo.name,
+      full_name: repo.full_name,
+      description: repo.description ?? null,
+      html_url: repo.html_url,
+      updated_at: repo.updated_at ?? new Date().toISOString(),
+      stargazers_count: repo.stargazers_count ?? 0,
+      language: repo.language ?? null,
+    })),
+    pagination: {
+      current_page: page,
+      per_page,
+      total_count: totalCount,
+      total_pages: totalPages,
+      has_next: page < totalPages,
+      has_previous: page > 1,
+    },
+  };
 }
 
 export async function read(owner: string, repository: string) {
@@ -35,8 +61,9 @@ export async function read(owner: string, repository: string) {
 
 async function listPullRequests(
   owner: string,
-  repoName: string
-): Promise<PullRequest[]> {
+  repoName: string,
+  { page = 1, per_page = 10 }: PaginationParams = {}
+): Promise<PaginatedResponse<PullRequest>> {
   const octokit = new Octokit();
   try {
     const response = await octokit.pulls.list({
@@ -45,6 +72,8 @@ async function listPullRequests(
       state: "open",
       sort: "updated",
       direction: "desc",
+      page,
+      per_page,
     });
 
     if (!response.data) {
@@ -54,6 +83,13 @@ async function listPullRequests(
         status: response.status,
       });
     }
+
+    // Get total count from the Link header if available
+    const totalCount = parseInt(
+      response.headers.link?.match(/page=(\d+)>; rel="last"/)?.[1] ?? "1",
+      10
+    );
+    const totalPages = Math.ceil(totalCount / per_page);
 
     // Fetch detailed PR data including statistics
     const pullRequests = await Promise.all(
@@ -82,7 +118,17 @@ async function listPullRequests(
       })
     );
 
-    return pullRequests;
+    return {
+      data: pullRequests,
+      pagination: {
+        current_page: page,
+        per_page,
+        total_count: totalCount,
+        total_pages: totalPages,
+        has_next: page < totalPages,
+        has_previous: page > 1,
+      },
+    };
   } catch (error) {
     logger.error({
       message: "Failed to fetch pull requests from GitHub",

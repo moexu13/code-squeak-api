@@ -2,6 +2,23 @@
  * Type definitions for GitHub API responses
  */
 
+export interface PaginationParams {
+  page?: number;
+  per_page?: number;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    current_page: number;
+    per_page: number;
+    total_count: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  };
+}
+
 export interface Repository {
   id: number;
   name: string;
