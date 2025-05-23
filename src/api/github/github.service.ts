@@ -12,6 +12,22 @@ interface Repository {
   language: string | null;
 }
 
+interface PullRequest {
+  id: number;
+  html_url: string;
+  title: string;
+  number: number;
+  user: {
+    login: string;
+  };
+  comments: number;
+  additions: number;
+  deletions: number;
+  created_at: string;
+  updated_at: string;
+  body_preview: string | null;
+}
+
 class GitHubError extends Error {
   constructor(
     message: string,
@@ -55,7 +71,7 @@ export async function read(owner: string, repository: string) {
 async function listPullRequests(
   owner: string,
   repoName: string
-): Promise<any[]> {
+): Promise<PullRequest[]> {
   const octokit = new Octokit();
   try {
     const response = await octokit.pulls.list({
@@ -74,7 +90,34 @@ async function listPullRequests(
       });
     }
 
-    return response.data;
+    // Fetch detailed PR data including statistics
+    const pullRequests = await Promise.all(
+      response.data.map(async (pr) => {
+        const details = await octokit.pulls.get({
+          owner,
+          repo: repoName,
+          pull_number: pr.number,
+        });
+
+        return {
+          id: pr.id,
+          html_url: pr.html_url,
+          title: pr.title,
+          number: pr.number,
+          user: {
+            login: pr.user?.login ?? "unknown",
+          },
+          comments: details.data.comments ?? 0,
+          additions: details.data.additions ?? 0,
+          deletions: details.data.deletions ?? 0,
+          created_at: pr.created_at ?? new Date().toISOString(),
+          updated_at: pr.updated_at ?? new Date().toISOString(),
+          body_preview: pr.body ? pr.body.substring(0, 200) : null,
+        };
+      })
+    );
+
+    return pullRequests;
   } catch (error) {
     logger.error({
       message: "Failed to fetch pull requests from GitHub",
