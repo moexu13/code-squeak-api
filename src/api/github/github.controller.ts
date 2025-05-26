@@ -1,6 +1,10 @@
 import { Request, Response } from "express";
 import asyncErrorBoundary from "../../errors/asyncErrorBoundary";
-import { createPullRequestComment, list as listRepos } from "./github.service";
+import {
+  createPullRequestComment,
+  list as listRepos,
+  read as readRepo,
+} from "./github.service";
 
 async function list(req: Request, res: Response) {
   const page = parseInt(req.query.page as string) || 1;
@@ -10,8 +14,9 @@ async function list(req: Request, res: Response) {
   res.json(data);
 }
 
-async function read(_req: Request, res: Response) {
-  res.send({ data: "Hello World" });
+async function read(req: Request, res: Response) {
+  const data = await readRepo(req.params.owner, req.params.repo);
+  res.json(data);
 }
 
 async function create(req: Request, res: Response) {
