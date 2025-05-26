@@ -59,7 +59,7 @@ export async function read(owner: string, repository: string) {
   return response.data;
 }
 
-async function listPullRequests(
+export async function listPullRequests(
   owner: string,
   repoName: string,
   { page = 1, per_page = 10 }: PaginationParams = {}
@@ -148,3 +148,80 @@ async function listPullRequests(
         });
   }
 }
+
+export async function createPullRequestComment(
+  owner: string,
+  repoName: string,
+  pullNumber: number,
+  body: string
+): Promise<void> {
+  const octokit = new Octokit();
+  try {
+    logger.debug({
+      message: "Creating pull request comment",
+      owner,
+      repoName,
+      pullNumber,
+      bodyLength: body.length,
+      context: "GitHubService",
+    });
+
+    const response = await octokit.issues.createComment({
+      owner,
+      repo: repoName,
+      issue_number: pullNumber, // Pull requests are treated as issues in the GitHub API
+      body,
+    });
+
+    if (!response?.data) {
+      throw new Error("Empty response from GitHub API");
+    }
+
+    logger.info({
+      message: "Successfully created comment on pull request",
+      owner,
+      repoName,
+      pullNumber,
+      commentId: response.data.id,
+    });
+  } catch (error) {
+    logger.error({
+      message: "Failed to create pull request comment",
+      error: error instanceof Error ? error.message : String(error),
+      owner,
+      repoName,
+      pullNumber,
+      context: "GitHubService",
+    });
+    throw new GitHubError("Failed to create pull request comment", {
+      owner,
+      repo: repoName,
+      pullNumber,
+      originalError: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+// TODO: filter diff returned from github api
+// function filterDiff(diff: string): string {
+//   // Limit the diff size to 10KB
+//   const MAX_DIFF_SIZE = 10 * 1024;
+//   if (diff.length > MAX_DIFF_SIZE) {
+//     diff = diff.substring(0, MAX_DIFF_SIZE) + "\n... (diff truncated)";
+//   }
+
+//   // Remove sensitive patterns
+//   const sensitivePatterns = [
+//     /api[_-]?key["']?\s*[:=]\s*["'][^"']+["']/gi,
+//     /secret["']?\s*[:=]\s*["'][^"']+["']/gi,
+//     /password["']?\s*[:=]\s*["'][^"']+["']/gi,
+//     /token["']?\s*[:=]\s*["'][^"']+["']/gi,
+//     /credential["']?\s*[:=]\s*["'][^"']+["']/gi,
+//   ];
+
+//   sensitivePatterns.forEach((pattern) => {
+//     diff = diff.replace(pattern, "[REDACTED]");
+//   });
+
+//   return diff;
+// }
