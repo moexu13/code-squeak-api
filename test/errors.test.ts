@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express, { RequestHandler } from "express";
-import notFound from "../src/errors/notFound";
-import methodNotAllowed from "../src/errors/methodNotAllowed";
+import {
+  NotFoundHandler,
+  MethodNotAllowedHandler,
+} from "../src/errors/handlers";
 import errorHandler from "../src/errors/errorHandler";
 import logger from "../src/utils/logger";
 
@@ -29,7 +31,8 @@ describe("Error Handlers", () => {
   app.post("/test", testHandler);
 
   // Error handlers
-  app.use(notFound);
+  app.use(NotFoundHandler.handle);
+  app.use(MethodNotAllowedHandler.handle);
   app.use(errorHandler);
 
   it("should return 404 for non-existent routes", async () => {
@@ -49,7 +52,7 @@ describe("Error Handlers", () => {
   it("should return 405 for method not allowed", async () => {
     const app = express();
     app.get("/test", testHandler);
-    app.all("/test", methodNotAllowed);
+    app.all("/test", MethodNotAllowedHandler.handle);
     app.use(errorHandler);
 
     const response = await request(app).post("/test").expect(405);
