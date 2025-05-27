@@ -8,11 +8,15 @@ import {
   PaginatedResponse,
 } from "./github.types";
 
+// Initialize Octokit with the GitHub token
+const octokit = new Octokit({
+  auth: process.env.GITHUB_TOKEN,
+});
+
 export async function list(
   owner: string,
   { page = 1, per_page = 10 }: PaginationParams = {}
 ): Promise<PaginatedResponse<Repository>> {
-  const octokit = new Octokit();
   const response = await octokit.repos.listForUser({
     username: owner,
     page,
@@ -59,7 +63,6 @@ async function listPullRequests(
   repoName: string,
   { page = 1, per_page = 10 }: PaginationParams = {}
 ): Promise<PaginatedResponse<PullRequest>> {
-  const octokit = new Octokit();
   try {
     const response = await octokit.pulls.list({
       owner,
@@ -150,50 +153,24 @@ async function listPullRequests(
   }
 }
 
-export async function createPullRequestComment(
+export async function create(
   owner: string,
   repoName: string,
   pullNumber: number,
   body: string
 ): Promise<void> {
-  const octokit = new Octokit();
   try {
-    logger.debug({
-      message: "Creating pull request comment",
-      owner,
-      repoName,
-      pullNumber,
-      bodyLength: body.length,
-      context: "GitHubService",
-    });
-
     const response = await octokit.issues.createComment({
       owner,
       repo: repoName,
-      issue_number: pullNumber, // Pull requests are treated as issues in the GitHub API
+      issue_number: pullNumber,
       body,
     });
 
     if (!response?.data) {
       throw new Error("Empty response from GitHub API");
     }
-
-    logger.info({
-      message: "Successfully created comment on pull request",
-      owner,
-      repoName,
-      pullNumber,
-      commentId: response.data.id,
-    });
   } catch (error) {
-    logger.error({
-      message: "Failed to create pull request comment",
-      error: error instanceof Error ? error.message : String(error),
-      owner,
-      repoName,
-      pullNumber,
-      context: "GitHubService",
-    });
     throw new GitHubError("Failed to create pull request comment", {
       owner,
       repo: repoName,

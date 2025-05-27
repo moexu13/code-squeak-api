@@ -19,7 +19,7 @@ import errorHandler from "./errors/errorHandler";
 import notFound from "./errors/notFound";
 import authMiddleware from "./middleware/auth";
 
-const app = express();
+export const app = express();
 
 app.use(express.json());
 

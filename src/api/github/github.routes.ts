@@ -7,7 +7,7 @@ const router = Router();
 router.route("/:owner").get(controller.list).all(methodNotAllowed);
 router.route("/:owner/:repo").get(controller.read).all(methodNotAllowed);
 router
-  .route("/:owner/:repo/pulls/:pull_number/comments")
+  .route("/:owner/:repo/pulls/:pull_number")
   .post(controller.create)
   .all(methodNotAllowed);
 

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import asyncErrorBoundary from "../../errors/asyncErrorBoundary";
 import {
-  createPullRequestComment,
+  create as createPullRequestComment,
   list as listRepos,
   read as readRepo,
 } from "./github.service";
@@ -20,8 +20,11 @@ async function read(req: Request, res: Response) {
 }
 
 async function create(req: Request, res: Response) {
-  const { owner, repo, pull_number, body } = req.body;
-  await createPullRequestComment(owner, repo, pull_number, body);
+  const { owner, repo, pull_number } = req.params;
+  const {
+    data: { comment },
+  } = req.body;
+  await createPullRequestComment(owner, repo, parseInt(pull_number), comment);
   res.send({ data: "Pull request comment created" });
 }
 
