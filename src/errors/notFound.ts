@@ -1,32 +1,21 @@
 import { Request, Response, NextFunction } from "express";
-import logger from "../utils/logger";
 import { NotFoundError } from "./http";
 
 /**
- * Class to handle not found errors in Express middleware
+ * Class to handle 404 Not Found errors
  */
 export class NotFoundHandler {
   /**
-   * Middleware to handle not found errors
+   * Middleware to handle 404 Not Found errors
    * @param req - Express request object
-   * @param _res - Express response object
+   * @param res - Express response object
    * @param next - Express next function
    */
-  static handle(req: Request, _res: Response, next: NextFunction): void {
+  static handle(req: Request, _res: Response, next: NextFunction) {
     const error = new NotFoundError(`Not found: ${req.originalUrl}`, {
       url: req.originalUrl,
       method: req.method,
     });
-
-    logger.error({
-      message: "Express error occurred",
-      error: {
-        name: error.name,
-        message: error.message,
-        ...error.context,
-      },
-    });
-
     next(error);
   }
 }

@@ -7,6 +7,7 @@ import { config } from "../config/env";
 import { HttpError, InternalServerError } from "./http";
 import { StatusError } from "./status";
 import { HttpErrorInterface, ErrorContext } from "./types";
+import { sanitizeErrorMessage } from "./utils";
 
 // Helper to check if an error has a status property
 function hasStatus(error: unknown): error is { status: number } {
@@ -39,7 +40,7 @@ export class ErrorHandler {
     logger.error({
       message: "Express error occurred",
       error: {
-        message: error.message,
+        message: sanitizeErrorMessage(error.message),
         name:
           error instanceof StatusError
             ? error.name
@@ -66,7 +67,9 @@ export class ErrorHandler {
     // Send response with appropriate status code
     res.status(hasStatus(error) ? error.status : 500).json({
       error: "Something went wrong",
-      message: config.env.isDevelopment ? error.message : undefined,
+      message: config.env.isDevelopment
+        ? sanitizeErrorMessage(error.message)
+        : undefined,
     });
   }
 }
