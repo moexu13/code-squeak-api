@@ -15,5 +15,5 @@
     "noImplicitReturns": true,
     "skipLibCheck": true
   },
-  "include": ["src", "test/analysis.test.ts", "test/errors.test.ts"]
+  "include": ["src", "test"]
 }
