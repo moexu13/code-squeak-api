@@ -1,27 +1,13 @@
-import * as Sentry from "@sentry/node";
 import { config } from "./config/env";
-
-// Initialize Sentry first
-Sentry.init({
-  dsn: config.sentry.dsn,
-  environment: config.sentry.environment,
-  tracesSampleRate: 1.0,
-});
-
-// Import Express after Sentry initialization
-import express from "express";
 import ViteExpress from "vite-express";
 import logger from "./utils/logger";
 
 import analysisRouter from "./api/analysis/analysis.router";
 import githubRouter from "./api/github/github.routes";
 import errorHandler from "./errors/errorHandler";
-import notFound from "./errors/notFound";
+import { NotFoundError } from "./errors/http";
 import authMiddleware from "./middleware/auth";
-
-export const app = express();
-
-app.use(express.json());
+import app from "./app";
 
 // Allow access to the root route
 app.get("/", (_, res) => {
@@ -34,7 +20,9 @@ app.use("/api/v1/github", githubRouter);
 app.use("/api/v1/code-analysis", analysisRouter);
 
 // And if there are problems handle them here
-app.use(notFound);
+app.use((req, _res, next) => {
+  next(new NotFoundError(`Not found: ${req.originalUrl}`));
+});
 app.use(errorHandler);
 
 ViteExpress.listen(app, config.server.port, () =>

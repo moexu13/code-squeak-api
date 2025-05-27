@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import logger from "../utils/logger";
-import { createSanitizedError } from "../utils/errorUtils";
+import { config } from "../config/env";
+import { HttpErrorInterface } from "./types";
+import { sanitizeErrorMessage } from "./utils";
 
 type AsyncFunction = (
   req: Request,
@@ -9,24 +11,41 @@ type AsyncFunction = (
 ) => Promise<any>;
 
 /**
- * Wraps an async function to handle errors and pass them to Express error handling middleware
- * @param fn - The async function to wrap
- * @returns Express middleware function
+ * Class to handle async errors in Express middleware
  */
-function asyncErrorBoundary(fn: AsyncFunction) {
-  return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      await fn(req, res, next);
-    } catch (error: unknown) {
-      // Log the sanitized error
-      logger.error({
-        msg: "Async operation failed",
-        error: createSanitizedError(error, req),
-      });
+export class AsyncErrorBoundary {
+  /**
+   * Wraps an async function to handle errors and pass them to Express error handling middleware
+   * @param fn - The async function to wrap
+   * @returns Express middleware function
+   */
+  static wrap(fn: AsyncFunction) {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        await fn(req, res, next);
+      } catch (error: unknown) {
+        // Only log errors in non-test environments
+        if (!config.env.isTest) {
+          logger.error({
+            message: "Async operation failed",
+            error: {
+              message: sanitizeErrorMessage(
+                error instanceof Error ? error.message : String(error)
+              ),
+              name: error instanceof Error ? error.name : "Error",
+              ...(error instanceof Error && error.stack
+                ? { stack: error.stack }
+                : {}),
+              ...(error as HttpErrorInterface).context,
+            },
+          });
+        }
 
-      next(error);
-    }
-  };
+        next(error);
+      }
+    };
+  }
 }
 
-export default asyncErrorBoundary;
+// For backward compatibility
+export default AsyncErrorBoundary.wrap;

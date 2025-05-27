@@ -5,6 +5,7 @@ import {
   list as listRepos,
   read as readRepo,
 } from "./github.service";
+import { StatusError } from "../../errors";
 
 async function list(req: Request, res: Response) {
   const page = parseInt(req.query.page as string) || 1;
@@ -24,8 +25,29 @@ async function create(req: Request, res: Response) {
   const {
     data: { comment },
   } = req.body;
-  await createPullRequestComment(owner, repo, parseInt(pull_number), comment);
-  res.send({ data: "Pull request comment created" });
+
+  if (!comment) {
+    throw new StatusError("Comment is required", 400, {
+      path: req.originalUrl,
+      method: req.method,
+    });
+  }
+
+  try {
+    await createPullRequestComment(owner, repo, parseInt(pull_number), comment);
+    res.send({ data: "Pull request comment created" });
+  } catch (error) {
+    if (error instanceof StatusError) {
+      throw error;
+    }
+    if (error instanceof Error && error.message.includes("Not Found")) {
+      throw new StatusError("Pull request not found", 404, {
+        path: req.originalUrl,
+        method: req.method,
+      });
+    }
+    throw error;
+  }
 }
 
 export default {
