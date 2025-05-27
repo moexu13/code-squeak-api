@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import createError from "http-errors";
 import logger from "../utils/logger";
-import { createSanitizedError } from "../utils/errorUtils";
+import { MethodNotAllowedError } from "./http";
 /**
  * Express middleware to handle method not allowed errors
  */
@@ -10,14 +9,20 @@ function methodNotAllowed(
   _res: Response,
   next: NextFunction
 ): void {
-  const error = createError(
-    405,
-    `${req.method} not allowed for ${req.originalUrl}`
+  const error = new MethodNotAllowedError(
+    `${req.method} not allowed for ${req.originalUrl}`,
+    {
+      url: req.originalUrl,
+      method: req.method,
+    }
   );
+
   logger.error({
     msg: "Method not allowed",
-    error: createSanitizedError(error, req),
+    error: error.message,
+    context: error.context,
   });
+
   next(error);
 }
 

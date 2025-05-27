@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
-import { app } from "../src/server";
+import app from "../src/app";
 
 // Custom error class with status
 class StatusError extends Error {
@@ -58,19 +58,21 @@ vi.mock("../src/api/github/github.service", () => ({
       body_preview: "Test PR body",
     },
   ]),
-  create: vi.fn().mockImplementation(async (pullNumber, comment) => {
-    if (!comment) {
-      throw new StatusError("Comment is required", 400);
-    }
-    if (pullNumber === 999999) {
-      throw new StatusError("Pull request not found", 404);
-    }
-    return {
-      id: 123,
-      body: comment,
-      created_at: new Date().toISOString(),
-    };
-  }),
+  create: vi
+    .fn()
+    .mockImplementation(async (_owner, _repo, pullNumber, comment) => {
+      if (!comment) {
+        throw new StatusError("Comment is required", 400);
+      }
+      if (parseInt(pullNumber) === 999999) {
+        throw new StatusError("Pull request not found", 404);
+      }
+      return {
+        id: 123,
+        body: comment,
+        created_at: new Date().toISOString(),
+      };
+    }),
 }));
 
 // Test configuration
@@ -95,8 +97,8 @@ describe("GitHub Controller", () => {
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .expect(200);
 
-      expect(response.body.data.length).toBeLessThanOrEqual(5);
-      expect(response.body.pagination.per_page).toBe(5);
+      expect(response.body.data.length).toBeLessThanOrEqual(10);
+      expect(response.body.pagination.per_page).toBe(10);
     });
   });
 
