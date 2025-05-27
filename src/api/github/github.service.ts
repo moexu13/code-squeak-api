@@ -50,16 +50,11 @@ export async function list(
 }
 
 export async function read(owner: string, repository: string) {
-  const octokit = new Octokit();
-  const response = await octokit.repos.get({
-    owner,
-    repo: repository,
-    pull_requests: listPullRequests(owner, repository),
-  });
-  return response.data;
+  const pullRequestsResponse = await listPullRequests(owner, repository);
+  return pullRequestsResponse.data;
 }
 
-export async function listPullRequests(
+async function listPullRequests(
   owner: string,
   repoName: string,
   { page = 1, per_page = 10 }: PaginationParams = {}
@@ -113,7 +108,13 @@ export async function listPullRequests(
           deletions: details.data.deletions ?? 0,
           created_at: pr.created_at ?? new Date().toISOString(),
           updated_at: pr.updated_at ?? new Date().toISOString(),
-          body_preview: pr.body ? pr.body.substring(0, 200) : null,
+          body_preview: pr.body
+            ? pr.body
+                .replace(/[\n\r]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .substring(0, 200)
+            : null,
         };
       })
     );
