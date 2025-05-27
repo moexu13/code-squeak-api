@@ -19,7 +19,7 @@ app.use(express.json());
 import analysisRouter from "./api/analysis/analysis.router";
 import githubRouter from "./api/github/github.routes";
 import errorHandler from "./errors/errorHandler";
-import notFound from "./errors/notFound";
+import { NotFoundHandler } from "./errors/handlers";
 import authMiddleware from "./middleware/auth";
 
 // Apply middleware
@@ -30,7 +30,7 @@ app.use("/api/v1/code-analysis", analysisRouter);
 app.use("/api/v1/github", githubRouter);
 
 // Error handling
-app.use(notFound);
+app.use(NotFoundHandler.handle);
 app.use(errorHandler);
 
 export default app;
