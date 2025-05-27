@@ -5,7 +5,7 @@ import logger from "./utils/logger";
 import analysisRouter from "./api/analysis/analysis.router";
 import githubRouter from "./api/github/github.routes";
 import errorHandler from "./errors/errorHandler";
-import { NotFoundHandler } from "./errors/handlers";
+import { NotFoundError } from "./errors/http";
 import authMiddleware from "./middleware/auth";
 import app from "./app";
 
@@ -20,7 +20,9 @@ app.use("/api/v1/github", githubRouter);
 app.use("/api/v1/code-analysis", analysisRouter);
 
 // And if there are problems handle them here
-app.use(NotFoundHandler.handle);
+app.use((req, _res, next) => {
+  next(new NotFoundError(`Not found: ${req.originalUrl}`));
+});
 app.use(errorHandler);
 
 ViteExpress.listen(app, config.server.port, () =>

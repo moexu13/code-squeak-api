@@ -1,10 +1,12 @@
+import { sanitizeErrorMessage } from "./utils";
+
 export class HttpError extends Error {
   constructor(
     message: string,
     public readonly status: number,
     public readonly context?: Record<string, unknown>
   ) {
-    super(message);
+    super(sanitizeErrorMessage(message));
     this.name = "HttpError";
   }
 }
