@@ -27,7 +27,10 @@ async function create(req: Request, res: Response) {
   } = req.body;
 
   if (!comment) {
-    throw new StatusError("Comment is required", 400);
+    throw new StatusError("Comment is required", 400, {
+      path: req.originalUrl,
+      method: req.method,
+    });
   }
 
   try {
@@ -38,7 +41,10 @@ async function create(req: Request, res: Response) {
       throw error;
     }
     if (error instanceof Error && error.message.includes("Not Found")) {
-      throw new StatusError("Pull request not found", 404);
+      throw new StatusError("Pull request not found", 404, {
+        path: req.originalUrl,
+        method: req.method,
+      });
     }
     throw error;
   }

@@ -1,29 +1,38 @@
 import { Request, Response, NextFunction } from "express";
 import logger from "../utils/logger";
 import { MethodNotAllowedError } from "./http";
+
 /**
- * Express middleware to handle method not allowed errors
+ * Class to handle method not allowed errors in Express middleware
  */
-function methodNotAllowed(
-  req: Request,
-  _res: Response,
-  next: NextFunction
-): void {
-  const error = new MethodNotAllowedError(
-    `${req.method} not allowed for ${req.originalUrl}`,
-    {
-      url: req.originalUrl,
-      method: req.method,
-    }
-  );
+export class MethodNotAllowedHandler {
+  /**
+   * Middleware to handle method not allowed errors
+   * @param req - Express request object
+   * @param _res - Express response object
+   * @param next - Express next function
+   */
+  static handle(req: Request, _res: Response, next: NextFunction): void {
+    const error = new MethodNotAllowedError(
+      `${req.method} not allowed for ${req.originalUrl}`,
+      {
+        url: req.originalUrl,
+        method: req.method,
+      }
+    );
 
-  logger.error({
-    msg: "Method not allowed",
-    error: error.message,
-    context: error.context,
-  });
+    logger.error({
+      message: "Express error occurred",
+      error: {
+        name: error.name,
+        message: error.message,
+        ...error.context,
+      },
+    });
 
-  next(error);
+    next(error);
+  }
 }
 
-export default methodNotAllowed;
+// For backward compatibility
+export default MethodNotAllowedHandler.handle;

@@ -3,22 +3,33 @@ import logger from "../utils/logger";
 import { NotFoundError } from "./http";
 
 /**
- * Express API "Not found" handler.
- * This middleware should be placed after all valid routes.
+ * Class to handle not found errors in Express middleware
  */
-function notFound(req: Request, _res: Response, next: NextFunction): void {
-  const error = new NotFoundError(`Not found: ${req.originalUrl}`, {
-    url: req.originalUrl,
-    method: req.method,
-  });
+export class NotFoundHandler {
+  /**
+   * Middleware to handle not found errors
+   * @param req - Express request object
+   * @param _res - Express response object
+   * @param next - Express next function
+   */
+  static handle(req: Request, _res: Response, next: NextFunction): void {
+    const error = new NotFoundError(`Not found: ${req.originalUrl}`, {
+      url: req.originalUrl,
+      method: req.method,
+    });
 
-  logger.error({
-    msg: "Not found",
-    error: error.message,
-    context: error.context,
-  });
+    logger.error({
+      message: "Express error occurred",
+      error: {
+        name: error.name,
+        message: error.message,
+        ...error.context,
+      },
+    });
 
-  next(error);
+    next(error);
+  }
 }
 
-export default notFound;
+// For backward compatibility
+export default NotFoundHandler.handle;
