@@ -1,20 +1,22 @@
 import { Router } from "express";
 import controller from "./github.controller";
-import { MethodNotAllowedHandler } from "../../errors/handlers";
+import { MethodNotAllowedError } from "../../errors/http";
 
 const router = Router();
 
-router
-  .route("/:owner")
-  .get(controller.list)
-  .all(MethodNotAllowedHandler.handle);
-router
-  .route("/:owner/:repo")
-  .get(controller.read)
-  .all(MethodNotAllowedHandler.handle);
+const methodNotAllowed = (req: any, _res: any, next: any) => {
+  next(
+    new MethodNotAllowedError(
+      `${req.method} not allowed for ${req.originalUrl}`
+    )
+  );
+};
+
+router.route("/:owner").get(controller.list).all(methodNotAllowed);
+router.route("/:owner/:repo").get(controller.read).all(methodNotAllowed);
 router
   .route("/:owner/:repo/pulls/:pull_number")
   .post(controller.create)
-  .all(MethodNotAllowedHandler.handle);
+  .all(methodNotAllowed);
 
 export default router;
