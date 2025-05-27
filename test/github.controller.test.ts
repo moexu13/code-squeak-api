@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import { app } from "../src/server";
 
@@ -24,7 +24,7 @@ vi.mock("../src/middleware/auth", () => ({
 
 // Mock the GitHub service
 vi.mock("../src/api/github/github.service", () => ({
-  list: vi.fn().mockImplementation(async (owner, options) => ({
+  list: vi.fn().mockImplementation(async (options) => ({
     data: [
       {
         id: 1,
@@ -43,7 +43,7 @@ vi.mock("../src/api/github/github.service", () => ({
       total_pages: 1,
     },
   })),
-  read: vi.fn().mockImplementation(async (owner, repo) => [
+  read: vi.fn().mockImplementation(async () => [
     {
       id: 1,
       number: 4,
@@ -58,21 +58,19 @@ vi.mock("../src/api/github/github.service", () => ({
       body_preview: "Test PR body",
     },
   ]),
-  create: vi
-    .fn()
-    .mockImplementation(async (owner, repo, pullNumber, comment) => {
-      if (!comment) {
-        throw new StatusError("Comment is required", 400);
-      }
-      if (pullNumber === 999999) {
-        throw new StatusError("Pull request not found", 404);
-      }
-      return {
-        id: 123,
-        body: comment,
-        created_at: new Date().toISOString(),
-      };
-    }),
+  create: vi.fn().mockImplementation(async (pullNumber, comment) => {
+    if (!comment) {
+      throw new StatusError("Comment is required", 400);
+    }
+    if (pullNumber === 999999) {
+      throw new StatusError("Pull request not found", 404);
+    }
+    return {
+      id: 123,
+      body: comment,
+      created_at: new Date().toISOString(),
+    };
+  }),
 }));
 
 // Test configuration
