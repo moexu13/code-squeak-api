@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import app from "../src/app";
+import { sanitizeDiff } from "../src/utils/sanitize";
 
 // Custom error class with status
 class StatusError extends Error {
@@ -73,6 +74,32 @@ vi.mock("../src/api/github/github.service", () => ({
         created_at: new Date().toISOString(),
       };
     }),
+  getDiff: vi.fn().mockImplementation(async (_owner, _repo, pullNumber) => {
+    if (parseInt(pullNumber) === 999999) {
+      throw new StatusError("Pull request not found", 404);
+    }
+    if (parseInt(pullNumber) === 999998) {
+      // Return a large diff that should be truncated
+      return sanitizeDiff(
+        "diff --git a/test.txt b/test.txt\n" + "x".repeat(11 * 1024)
+      );
+    }
+    if (parseInt(pullNumber) === 999997) {
+      // Return a diff with sensitive data
+      return sanitizeDiff(`diff --git a/test.txt b/test.txt
+--- a/test.txt
++++ b/test.txt
+@@ -1,2 +1,2 @@
+-api_key="secret123"
++api_key="newsecret456"
+-password="oldpass"
++password="newpass"
+`);
+    }
+    return sanitizeDiff(
+      "diff --git a/test.txt b/test.txt\nindex abc123..def456 100644\n--- a/test.txt\n+++ b/test.txt\n@@ -1,2 +1,2 @@\n-old line\n+new line"
+    );
+  }),
 }));
 
 // Test configuration
@@ -123,6 +150,51 @@ describe("GitHub Controller", () => {
       expect(pr).toHaveProperty("created_at");
       expect(pr).toHaveProperty("updated_at");
       expect(pr).toHaveProperty("body_preview");
+    });
+  });
+
+  describe("GET /api/v1/github/:owner/:repo/:pull_number", () => {
+    it("should get diff for a pull request", async () => {
+      const response = await request(app)
+        .get("/api/v1/github/test-owner/test-repo/123")
+        .set("Authorization", `Bearer ${TEST_API_KEY}`)
+        .expect(200);
+
+      expect(response.body).toBeDefined();
+      expect(response.body.data).toBeDefined();
+      expect(response.body.data).toContain("diff --git");
+      expect(response.body.data).toContain("--- a/test.txt");
+      expect(response.body.data).toContain("+++ b/test.txt");
+    });
+
+    it("should truncate large diffs", async () => {
+      const response = await request(app)
+        .get("/api/v1/github/test-owner/test-repo/999998")
+        .set("Authorization", `Bearer ${TEST_API_KEY}`)
+        .expect(200);
+
+      expect(response.body.data.length).toBeLessThanOrEqual(10 * 1024 + 100); // 10KB + some extra for the truncation message
+      expect(response.body.data).toContain("... (diff truncated)");
+    });
+
+    it("should redact sensitive data", async () => {
+      const response = await request(app)
+        .get("/api/v1/github/test-owner/test-repo/999997")
+        .set("Authorization", `Bearer ${TEST_API_KEY}`)
+        .expect(200);
+
+      expect(response.body.data).not.toContain("secret123");
+      expect(response.body.data).not.toContain("newsecret456");
+      expect(response.body.data).not.toContain("oldpass");
+      expect(response.body.data).not.toContain("newpass");
+      expect(response.body.data).toContain("[REDACTED]");
+    });
+
+    it("should return 404 for invalid PR number", async () => {
+      await request(app)
+        .get("/api/v1/github/test-owner/test-repo/999999")
+        .set("Authorization", `Bearer ${TEST_API_KEY}`)
+        .expect(404);
     });
   });
 
