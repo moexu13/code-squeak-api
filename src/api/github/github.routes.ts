@@ -15,7 +15,7 @@ const methodNotAllowed = (req: any, _res: any, next: any) => {
 router.route("/:owner").get(controller.list).all(methodNotAllowed);
 router.route("/:owner/:repo").get(controller.read).all(methodNotAllowed);
 router
-  .route("/:owner/:repo/pulls/:pull_number")
+  .route("/:owner/:repo/:pull_number")
   .post(controller.create)
   .all(methodNotAllowed);
 

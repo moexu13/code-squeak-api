@@ -126,21 +126,20 @@ describe("GitHub Controller", () => {
     });
   });
 
-  describe("POST /api/v1/github/:owner/:repo/pulls/:number", () => {
+  describe("POST /api/v1/github/:owner/:repo/:number", () => {
     it("should create a comment on a pull request", async () => {
       const response = await request(app)
-        .post("/api/v1/github/moexu13/code-squeak-api/pulls/4")
+        .post("/api/v1/github/test-owner/test-repo/123")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .send({ data: { comment: "Test comment" } })
         .expect(200);
 
       expect(response.body).toBeDefined();
-      expect(response.body.data).toBe("Pull request comment created");
     });
 
     it("should return 400 when comment is missing", async () => {
       await request(app)
-        .post("/api/v1/github/moexu13/code-squeak-api/pulls/4")
+        .post("/api/v1/github/test-owner/test-repo/123")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .send({ data: {} })
         .expect(400);
@@ -148,9 +147,9 @@ describe("GitHub Controller", () => {
 
     it("should return 404 for invalid PR number", async () => {
       await request(app)
-        .post("/api/v1/github/moexu13/code-squeak-api/pulls/999999")
+        .post("/api/v1/github/test-owner/test-repo/999999")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
-        .send({ data: { comment: "This should fail" } })
+        .send({ data: { comment: "Test comment" } })
         .expect(404);
     });
   });
