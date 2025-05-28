@@ -4,6 +4,7 @@ import {
   create as createPullRequestComment,
   list as listRepos,
   read as readRepo,
+  getDiff as getPullRequestDiff,
 } from "./github.service";
 import { StatusError } from "../../errors";
 
@@ -50,8 +51,29 @@ async function create(req: Request, res: Response) {
   }
 }
 
+async function getDiff(req: Request, res: Response) {
+  const { owner, repo, pull_number } = req.params;
+
+  try {
+    const diff = await getPullRequestDiff(owner, repo, parseInt(pull_number));
+    res.send({ data: diff });
+  } catch (error) {
+    if (error instanceof StatusError) {
+      throw error;
+    }
+    if (error instanceof Error && error.message.includes("Not Found")) {
+      throw new StatusError("Pull request not found", 404, {
+        path: req.originalUrl,
+        method: req.method,
+      });
+    }
+    throw error;
+  }
+}
+
 export default {
   list: asyncErrorBoundary(list),
   read: asyncErrorBoundary(read),
   create: asyncErrorBoundary(create),
+  getDiff: asyncErrorBoundary(getDiff),
 };

@@ -1,6 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import logger from "../../utils/logger";
 import { GitHubError } from "../../errors/github";
+import { sanitizeDiff } from "../../utils/sanitize";
 import {
   Repository,
   PullRequest,
@@ -180,26 +181,31 @@ export async function create(
   }
 }
 
-// TODO: filter diff returned from github api
-// function filterDiff(diff: string): string {
-//   // Limit the diff size to 10KB
-//   const MAX_DIFF_SIZE = 10 * 1024;
-//   if (diff.length > MAX_DIFF_SIZE) {
-//     diff = diff.substring(0, MAX_DIFF_SIZE) + "\n... (diff truncated)";
-//   }
+export async function getDiff(
+  owner: string,
+  repoName: string,
+  pullNumber: number
+) {
+  try {
+    const response = await octokit.request({
+      method: "GET",
+      url: `/repos/${owner}/${repoName}/pulls/${pullNumber}`,
+      headers: {
+        accept: "application/vnd.github.v3.diff",
+      },
+    });
 
-//   // Remove sensitive patterns
-//   const sensitivePatterns = [
-//     /api[_-]?key["']?\s*[:=]\s*["'][^"']+["']/gi,
-//     /secret["']?\s*[:=]\s*["'][^"']+["']/gi,
-//     /password["']?\s*[:=]\s*["'][^"']+["']/gi,
-//     /token["']?\s*[:=]\s*["'][^"']+["']/gi,
-//     /credential["']?\s*[:=]\s*["'][^"']+["']/gi,
-//   ];
+    if (!response?.data) {
+      throw new Error("Empty response from GitHub API");
+    }
 
-//   sensitivePatterns.forEach((pattern) => {
-//     diff = diff.replace(pattern, "[REDACTED]");
-//   });
-
-//   return diff;
-// }
+    return sanitizeDiff(response.data as string);
+  } catch (error) {
+    throw new GitHubError("Failed to fetch pull request diff", {
+      owner,
+      repo: repoName,
+      pullNumber,
+      originalError: error instanceof Error ? error.message : String(error),
+    });
+  }
+}

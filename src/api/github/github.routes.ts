@@ -16,6 +16,7 @@ router.route("/:owner").get(controller.list).all(methodNotAllowed);
 router.route("/:owner/:repo").get(controller.read).all(methodNotAllowed);
 router
   .route("/:owner/:repo/:pull_number")
+  .get(controller.getDiff)
   .post(controller.create)
   .all(methodNotAllowed);
 
