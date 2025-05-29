@@ -7,7 +7,7 @@ import {
   getDiff as getPullRequestDiff,
 } from "./github.service";
 import { StatusError } from "../../errors";
-import { sanitizeDiff } from "../../utils/sanitize";
+import { sanitizeDiff, sanitizeErrorMessage } from "../../utils/sanitize";
 
 const MAX_DIFF_SIZE = 10 * 1024; // 10KB
 
@@ -70,14 +70,20 @@ async function getDiff(req: Request, res: Response) {
     res.json({ data: sanitizedDiff });
   } catch (error) {
     if (error instanceof StatusError) {
-      res.status(error.status).json({ error: error.message });
+      res
+        .status(error.status)
+        .json({ error: sanitizeErrorMessage(error.message) });
       return;
     }
     if (error instanceof Error && error.message.includes("Not Found")) {
-      res.status(404).json({ error: "Pull request not found" });
+      res
+        .status(404)
+        .json({ error: sanitizeErrorMessage("Pull request not found") });
       return;
     }
-    res.status(500).json({ error: "Internal server error" });
+    res
+      .status(500)
+      .json({ error: sanitizeErrorMessage("Internal server error") });
   }
 }
 
