@@ -7,6 +7,9 @@ import {
   getDiff as getPullRequestDiff,
 } from "./github.service";
 import { StatusError } from "../../errors";
+import { sanitizeDiff } from "../../utils/sanitize";
+
+const MAX_DIFF_SIZE = 10 * 1024; // 10KB
 
 async function list(req: Request, res: Response) {
   const page = parseInt(req.query.page as string) || 1;
@@ -56,18 +59,25 @@ async function getDiff(req: Request, res: Response) {
 
   try {
     const diff = await getPullRequestDiff(owner, repo, parseInt(pull_number));
-    res.send({ data: diff });
+
+    // Sanitize and truncate the diff if needed
+    let sanitizedDiff = sanitizeDiff(diff);
+    if (sanitizedDiff.length > MAX_DIFF_SIZE) {
+      sanitizedDiff =
+        sanitizedDiff.slice(0, MAX_DIFF_SIZE) + "\n... (diff truncated)";
+    }
+
+    res.json({ data: sanitizedDiff });
   } catch (error) {
     if (error instanceof StatusError) {
-      throw error;
+      res.status(error.status).json({ error: error.message });
+      return;
     }
     if (error instanceof Error && error.message.includes("Not Found")) {
-      throw new StatusError("Pull request not found", 404, {
-        path: req.originalUrl,
-        method: req.method,
-      });
+      res.status(404).json({ error: "Pull request not found" });
+      return;
     }
-    throw error;
+    res.status(500).json({ error: "Internal server error" });
   }
 }
 

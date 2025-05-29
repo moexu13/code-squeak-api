@@ -4,28 +4,40 @@
  * @returns The sanitized diff string
  */
 export function sanitizeDiff(diff: string): string {
-  // Remove sensitive patterns first
-  const sensitivePatterns = [
-    /api[_-]?key["']?\s*[:=]\s*["'][^"']+["']/gi,
-    /secret["']?\s*[:=]\s*["'][^"']+["']/gi,
-    /password["']?\s*[:=]\s*["'][^"']+["']/gi,
-    /token["']?\s*[:=]\s*["'][^"']+["']/gi,
-    /credential["']?\s*[:=]\s*["'][^"']+["']/gi,
+  // Patterns for sensitive data
+  const SENSITIVE_PATTERNS = [
+    // Key-value pairs
+    /(?:password|secret|key|token|auth)[=:]\s*["']?[^"'\s]+["']?/gi,
+    /(?:api[_-]?key|access[_-]?token)[=:]\s*["']?[^"'\s]+["']?/gi,
+    /(?:private[_-]?key|secret[_-]?key)[=:]\s*["']?[^"'\s]+["']?/gi,
+    // Plain sensitive strings
+    /\b(?:password|secret|key|token|auth)[0-9a-zA-Z_-]+\b/gi,
   ];
 
-  let filteredDiff = diff;
-  sensitivePatterns.forEach((pattern) => {
-    filteredDiff = filteredDiff.replace(pattern, "[REDACTED]");
+  if (!diff) return "";
+
+  // Replace sensitive data with [REDACTED]
+  let sanitized = diff;
+  SENSITIVE_PATTERNS.forEach((pattern) => {
+    sanitized = sanitized.replace(pattern, (match) => {
+      // If it's a key-value pair, preserve the key
+      if (match.includes("=") || match.includes(":")) {
+        const [key] = match.split(/[=:]\s*/);
+        return `${key}=[REDACTED]`;
+      }
+      // Otherwise just redact the whole thing
+      return "[REDACTED]";
+    });
   });
 
   // Then limit the diff size to 10KB
   const MAX_DIFF_SIZE = 10 * 1024;
-  if (filteredDiff.length > MAX_DIFF_SIZE) {
-    filteredDiff =
-      filteredDiff.substring(0, MAX_DIFF_SIZE) + "\n... (diff truncated)";
+  if (sanitized.length > MAX_DIFF_SIZE) {
+    sanitized =
+      sanitized.substring(0, MAX_DIFF_SIZE) + "\n... (diff truncated)";
   }
 
-  return filteredDiff;
+  return sanitized;
 }
 
 /**

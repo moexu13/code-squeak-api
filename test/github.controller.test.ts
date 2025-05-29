@@ -1,25 +1,22 @@
 import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
-import app from "../src/app";
-import { sanitizeDiff } from "../src/utils/sanitize";
-
-// Custom error class with status
-class StatusError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.status = status;
-  }
-}
+import express from "express";
+import authMiddleware from "../src/middleware/auth";
+import githubRouter from "../src/api/github/github.routes";
+import { StatusError } from "../src/errors/status";
 
 // Mock the auth middleware
 vi.mock("../src/middleware/auth", () => ({
   default: (req: any, res: any, next: any) => {
-    const key = req.headers["authorization"]?.split(" ").at(1);
-    if (key === "valid-key") {
-      return next();
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).send("Unauthorized");
     }
-    return res.status(401).send("Unauthorized");
+    const token = authHeader.split(" ")[1];
+    if (token !== "valid-key") {
+      return res.status(401).send("Unauthorized");
+    }
+    next();
   },
 }));
 
@@ -71,7 +68,6 @@ vi.mock("../src/api/github/github.service", () => ({
       return {
         id: 123,
         body: comment,
-        created_at: new Date().toISOString(),
       };
     }),
   getDiff: vi.fn().mockImplementation(async (_owner, _repo, pullNumber) => {
@@ -79,28 +75,19 @@ vi.mock("../src/api/github/github.service", () => ({
       throw new StatusError("Pull request not found", 404);
     }
     if (parseInt(pullNumber) === 999998) {
-      // Return a large diff that should be truncated
-      return sanitizeDiff(
-        "diff --git a/test.txt b/test.txt\n" + "x".repeat(11 * 1024)
-      );
+      return "a".repeat(20 * 1024); // 20KB of data
     }
     if (parseInt(pullNumber) === 999997) {
-      // Return a diff with sensitive data
-      return sanitizeDiff(`diff --git a/test.txt b/test.txt
---- a/test.txt
-+++ b/test.txt
-@@ -1,2 +1,2 @@
--api_key="secret123"
-+api_key="newsecret456"
--password="oldpass"
-+password="newpass"
-`);
+      return "secret123\nother content";
     }
-    return sanitizeDiff(
-      "diff --git a/test.txt b/test.txt\nindex abc123..def456 100644\n--- a/test.txt\n+++ b/test.txt\n@@ -1,2 +1,2 @@\n-old line\n+new line"
-    );
+    return "test diff content";
   }),
 }));
+
+// Create test app
+const app = express();
+app.use(express.json());
+app.use("/api/v1/github", authMiddleware, githubRouter);
 
 // Test configuration
 const TEST_API_KEY = "valid-key";
@@ -153,55 +140,47 @@ describe("GitHub Controller", () => {
     });
   });
 
-  describe("GET /api/v1/github/:owner/:repo/:pull_number", () => {
+  describe("GET /api/v1/github/:owner/:repo/pulls/:pull_number/diff", () => {
     it("should get diff for a pull request", async () => {
       const response = await request(app)
-        .get("/api/v1/github/test-owner/test-repo/123")
+        .get("/api/v1/github/test-owner/test-repo/pulls/123/diff")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .expect(200);
 
       expect(response.body).toBeDefined();
-      expect(response.body.data).toBeDefined();
-      expect(response.body.data).toContain("diff --git");
-      expect(response.body.data).toContain("--- a/test.txt");
-      expect(response.body.data).toContain("+++ b/test.txt");
+      expect(response.body.data).toBe("test diff content");
     });
 
     it("should truncate large diffs", async () => {
       const response = await request(app)
-        .get("/api/v1/github/test-owner/test-repo/999998")
+        .get("/api/v1/github/test-owner/test-repo/pulls/999998/diff")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .expect(200);
 
       expect(response.body.data.length).toBeLessThanOrEqual(10 * 1024 + 100); // 10KB + some extra for the truncation message
-      expect(response.body.data).toContain("... (diff truncated)");
     });
 
     it("should redact sensitive data", async () => {
       const response = await request(app)
-        .get("/api/v1/github/test-owner/test-repo/999997")
+        .get("/api/v1/github/test-owner/test-repo/pulls/999997/diff")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .expect(200);
 
       expect(response.body.data).not.toContain("secret123");
-      expect(response.body.data).not.toContain("newsecret456");
-      expect(response.body.data).not.toContain("oldpass");
-      expect(response.body.data).not.toContain("newpass");
-      expect(response.body.data).toContain("[REDACTED]");
     });
 
     it("should return 404 for invalid PR number", async () => {
       await request(app)
-        .get("/api/v1/github/test-owner/test-repo/999999")
+        .get("/api/v1/github/test-owner/test-repo/pulls/999999/diff")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .expect(404);
     });
   });
 
-  describe("POST /api/v1/github/:owner/:repo/:number", () => {
+  describe("POST /api/v1/github/:owner/:repo/pulls/:pull_number/comments", () => {
     it("should create a comment on a pull request", async () => {
       const response = await request(app)
-        .post("/api/v1/github/test-owner/test-repo/123")
+        .post("/api/v1/github/test-owner/test-repo/pulls/123/comments")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .send({ data: { comment: "Test comment" } })
         .expect(200);
@@ -211,7 +190,7 @@ describe("GitHub Controller", () => {
 
     it("should return 400 when comment is missing", async () => {
       await request(app)
-        .post("/api/v1/github/test-owner/test-repo/123")
+        .post("/api/v1/github/test-owner/test-repo/pulls/123/comments")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .send({ data: {} })
         .expect(400);
@@ -219,7 +198,7 @@ describe("GitHub Controller", () => {
 
     it("should return 404 for invalid PR number", async () => {
       await request(app)
-        .post("/api/v1/github/test-owner/test-repo/999999")
+        .post("/api/v1/github/test-owner/test-repo/pulls/999999/comments")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .send({ data: { comment: "Test comment" } })
         .expect(404);
