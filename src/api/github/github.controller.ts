@@ -76,14 +76,10 @@ async function getDiff(req: Request, res: Response) {
       return;
     }
     if (error instanceof Error && error.message.includes("Not Found")) {
-      res
-        .status(404)
-        .json({ error: sanitizeErrorMessage("Pull request not found") });
+      res.status(404).json({ error: "Pull request not found" });
       return;
     }
-    res
-      .status(500)
-      .json({ error: sanitizeErrorMessage("Internal server error") });
+    res.status(500).json({ error: "Internal server error" });
   }
 }
 
