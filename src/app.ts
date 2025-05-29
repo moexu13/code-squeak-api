@@ -48,9 +48,4 @@ process.on("SIGTERM", async () => {
   process.exit(0);
 });
 
-process.on("SIGINT", async () => {
-  await redisClient.disconnect();
-  process.exit(0);
-});
-
 export default app;
