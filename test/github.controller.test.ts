@@ -1,9 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import express from "express";
 import authMiddleware from "../src/middleware/auth";
 import githubRouter from "../src/api/github/github.routes";
 import { StatusError } from "../src/errors/status";
+import { redisClient } from "../src/utils/redis";
 
 // Mock the auth middleware
 vi.mock("../src/middleware/auth", () => ({
@@ -93,6 +94,14 @@ app.use("/api/v1/github", authMiddleware, githubRouter);
 const TEST_API_KEY = "valid-key";
 
 describe("GitHub Controller", () => {
+  beforeAll(async () => {
+    await redisClient.connect();
+  });
+
+  afterAll(async () => {
+    await redisClient.disconnect();
+  });
+
   describe("GET /api/v1/github/:owner", () => {
     it("should list repositories for a user", async () => {
       const response = await request(app)
@@ -140,10 +149,10 @@ describe("GitHub Controller", () => {
     });
   });
 
-  describe("GET /api/v1/github/:owner/:repo/pulls/:pull_number/diff", () => {
+  describe("GET /api/v1/github/:owner/:repo/:pull_number/diff", () => {
     it("should get diff for a pull request", async () => {
       const response = await request(app)
-        .get("/api/v1/github/test-owner/test-repo/pulls/123/diff")
+        .get("/api/v1/github/test-owner/test-repo/123/diff")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .expect(200);
 
@@ -153,7 +162,7 @@ describe("GitHub Controller", () => {
 
     it("should truncate large diffs", async () => {
       const response = await request(app)
-        .get("/api/v1/github/test-owner/test-repo/pulls/999998/diff")
+        .get("/api/v1/github/test-owner/test-repo/999998/diff")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .expect(200);
 
@@ -162,7 +171,7 @@ describe("GitHub Controller", () => {
 
     it("should redact sensitive data", async () => {
       const response = await request(app)
-        .get("/api/v1/github/test-owner/test-repo/pulls/999997/diff")
+        .get("/api/v1/github/test-owner/test-repo/999997/diff")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .expect(200);
 
@@ -171,16 +180,16 @@ describe("GitHub Controller", () => {
 
     it("should return 404 for invalid PR number", async () => {
       await request(app)
-        .get("/api/v1/github/test-owner/test-repo/pulls/999999/diff")
+        .get("/api/v1/github/test-owner/test-repo/999999/diff")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .expect(404);
     });
   });
 
-  describe("POST /api/v1/github/:owner/:repo/pulls/:pull_number/comments", () => {
+  describe("POST /api/v1/github/:owner/:repo/:pull_number/comments", () => {
     it("should create a comment on a pull request", async () => {
       const response = await request(app)
-        .post("/api/v1/github/test-owner/test-repo/pulls/123/comments")
+        .post("/api/v1/github/test-owner/test-repo/123/comments")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .send({ data: { comment: "Test comment" } })
         .expect(200);
@@ -190,7 +199,7 @@ describe("GitHub Controller", () => {
 
     it("should return 400 when comment is missing", async () => {
       await request(app)
-        .post("/api/v1/github/test-owner/test-repo/pulls/123/comments")
+        .post("/api/v1/github/test-owner/test-repo/123/comments")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .send({ data: {} })
         .expect(400);
@@ -198,7 +207,7 @@ describe("GitHub Controller", () => {
 
     it("should return 404 for invalid PR number", async () => {
       await request(app)
-        .post("/api/v1/github/test-owner/test-repo/pulls/999999/comments")
+        .post("/api/v1/github/test-owner/test-repo/999999/comments")
         .set("Authorization", `Bearer ${TEST_API_KEY}`)
         .send({ data: { comment: "Test comment" } })
         .expect(404);

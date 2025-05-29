@@ -23,15 +23,15 @@ router.get("/:owner", controller.list);
 router.get("/:owner/:repo", controller.read);
 
 // Create a comment on a pull request
-router.post("/:owner/:repo/pulls/:pull_number/comments", controller.create);
+router.post("/:owner/:repo/:pull_number/comments", controller.create);
 
 // Get diff for a pull request
-router.get("/:owner/:repo/pulls/:pull_number/diff", controller.getDiff);
+router.get("/:owner/:repo/:pull_number/diff", controller.getDiff);
 
 // Handle unsupported methods
 router.all("/:owner", methodNotAllowed);
 router.all("/:owner/:repo", methodNotAllowed);
-router.all("/:owner/:repo/pulls/:pull_number/comments", methodNotAllowed);
-router.all("/:owner/:repo/pulls/:pull_number/diff", methodNotAllowed);
+router.all("/:owner/:repo/:pull_number/comments", methodNotAllowed);
+router.all("/:owner/:repo/:pull_number/diff", methodNotAllowed);
 
 export default router;
