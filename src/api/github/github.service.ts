@@ -8,6 +8,7 @@ import {
   PaginationParams,
   PaginatedResponse,
 } from "./github.types";
+import { StatusError } from "../../errors/status";
 
 // Initialize Octokit with the GitHub token
 const octokit = new Octokit({
@@ -201,6 +202,13 @@ export async function getDiff(
 
     return sanitizeDiff(response.data as string);
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Not Found")) {
+      throw new StatusError("Pull request not found", 404, {
+        owner,
+        repo: repoName,
+        pullNumber,
+      });
+    }
     throw new GitHubError("Failed to fetch pull request diff", {
       owner,
       repo: repoName,
