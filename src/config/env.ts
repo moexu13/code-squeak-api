@@ -28,6 +28,11 @@ interface Config {
     dsn: string;
     environment: string;
   };
+  redis: {
+    url: string;
+    password?: string;
+    tls?: boolean;
+  };
 }
 
 // Validate required environment variables
@@ -36,6 +41,7 @@ const requiredEnvVars = [
   "UNKEY_ROOT_KEY",
   "UNKEY_API_ID",
   "SENTRY_DSN",
+  "REDIS_URL",
 ] as const;
 
 for (const envVar of requiredEnvVars) {
@@ -64,6 +70,11 @@ export const config: Config = {
   sentry: {
     dsn: process.env.SENTRY_DSN as string,
     environment: process.env.NODE_ENV || "development",
+  },
+  redis: {
+    url: process.env.REDIS_URL as string,
+    password: process.env.REDIS_PASSWORD,
+    tls: process.env.REDIS_TLS === "true",
   },
 } as const;
 
