@@ -9,16 +9,35 @@ import {
   PaginatedResponse,
 } from "./github.types";
 import { StatusError } from "../../errors/status";
+import { getCached, setCached, generateCacheKey } from "../../utils/cache";
 
 // Initialize Octokit with the GitHub token
 const octokit = new Octokit({
   auth: process.env.GITHUB_TOKEN,
 });
 
+const CACHE_PREFIX = "github:repos";
+
 export async function list(
   owner: string,
   { page = 1, per_page = 10 }: PaginationParams = {}
 ): Promise<PaginatedResponse<Repository>> {
+  // Generate cache key based on owner and pagination params
+  const cacheKey = generateCacheKey(CACHE_PREFIX, { owner, page, per_page });
+
+  // Try to get cached data
+  const cached = await getCached<PaginatedResponse<Repository>>(cacheKey);
+  if (cached) {
+    logger.info({
+      message: "Cache hit for repository list",
+      owner,
+      page,
+      per_page,
+    });
+    return cached;
+  }
+
+  // If not in cache, fetch from GitHub API
   const response = await octokit.repos.listForUser({
     username: owner,
     page,
@@ -33,7 +52,7 @@ export async function list(
   );
   const totalPages = Math.ceil(totalCount / per_page);
 
-  return {
+  const result = {
     data: response.data.map((repo) => ({
       id: repo.id,
       name: repo.name,
@@ -53,6 +72,11 @@ export async function list(
       has_previous: page > 1,
     },
   };
+
+  // Cache the result
+  await setCached(cacheKey, result);
+
+  return result;
 }
 
 export async function read(owner: string, repository: string) {
