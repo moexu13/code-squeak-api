@@ -1,3 +1,5 @@
+import logger from "./logger";
+
 interface CircuitBreakerConfig {
   failureThreshold: number;
   resetTimeout: number;
@@ -31,6 +33,14 @@ export class CircuitBreaker {
       if (Date.now() - this.stats.lastFailureTime >= this.config.resetTimeout) {
         this.stats.state = "halfOpen";
       } else {
+        logger.error({
+          message: "Circuit breaker is open",
+          context: {
+            failures: this.stats.failures,
+            lastFailureTime: new Date(this.stats.lastFailureTime).toISOString(),
+            resetTimeout: this.config.resetTimeout,
+          },
+        });
         throw new Error("Circuit breaker is open");
       }
     }
@@ -40,7 +50,7 @@ export class CircuitBreaker {
       this.onSuccess();
       return result;
     } catch (error) {
-      this.onFailure();
+      this.onFailure(error);
       throw error;
     }
   }
@@ -56,12 +66,30 @@ export class CircuitBreaker {
     }
   }
 
-  private onFailure(): void {
+  private onFailure(error: unknown): void {
     this.stats.failures++;
     this.stats.lastFailureTime = Date.now();
 
+    logger.error({
+      message: "Circuit breaker failure",
+      error: error instanceof Error ? error : new Error(String(error)),
+      context: {
+        failures: this.stats.failures,
+        failureThreshold: this.config.failureThreshold,
+        state: this.stats.state,
+      },
+    });
+
     if (this.stats.failures >= this.config.failureThreshold) {
       this.stats.state = "open";
+      logger.error({
+        message: "Circuit breaker opened",
+        context: {
+          failures: this.stats.failures,
+          failureThreshold: this.config.failureThreshold,
+          lastFailureTime: new Date(this.stats.lastFailureTime).toISOString(),
+        },
+      });
     }
   }
 
@@ -72,5 +100,11 @@ export class CircuitBreaker {
       state: "closed",
       successes: 0,
     };
+    logger.info({
+      message: "Circuit breaker reset",
+      context: {
+        previousState: this.stats.state,
+      },
+    });
   }
 }
