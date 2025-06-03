@@ -19,6 +19,7 @@ const octokit = new Octokit({
 const CACHE_PREFIX = "github:repos";
 const PR_CACHE_PREFIX = "github:pulls";
 const PR_DETAILS_CACHE_PREFIX = "github:pr-details";
+const DIFF_CACHE_PREFIX = "github:diff";
 
 export async function list(
   owner: string,
@@ -276,6 +277,26 @@ export async function getDiff(
   pullNumber: number
 ) {
   try {
+    // Generate cache key for the diff
+    const diffCacheKey = generateCacheKey(DIFF_CACHE_PREFIX, {
+      owner,
+      repo: repoName,
+      number: pullNumber,
+    });
+
+    // Try to get cached diff
+    const cachedDiff = await getCached<string>(diffCacheKey);
+    if (cachedDiff) {
+      logger.info({
+        message: "Cache hit for pull request diff",
+        owner,
+        repo: repoName,
+        number: pullNumber,
+      });
+      return cachedDiff;
+    }
+
+    // If not in cache, fetch from GitHub API
     const response = await octokit.request({
       method: "GET",
       url: `/repos/${owner}/${repoName}/pulls/${pullNumber}`,
@@ -288,7 +309,13 @@ export async function getDiff(
       throw new Error("Empty response from GitHub API");
     }
 
-    return sanitizeDiff(response.data as string);
+    const sanitizedDiff = sanitizeDiff(response.data as string);
+
+    // Cache the sanitized diff with a short TTL (1 minute)
+    // We use a shorter TTL for diffs since they can change frequently
+    await setCached(diffCacheKey, sanitizedDiff, 60);
+
+    return sanitizedDiff;
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not Found")) {
       throw new StatusError("Pull request not found", 404, {
