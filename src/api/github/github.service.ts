@@ -9,16 +9,38 @@ import {
   PaginatedResponse,
 } from "./github.types";
 import { StatusError } from "../../errors/status";
+import { getCached, setCached, generateCacheKey } from "../../utils/cache";
 
 // Initialize Octokit with the GitHub token
 const octokit = new Octokit({
   auth: process.env.GITHUB_TOKEN,
 });
 
+const CACHE_PREFIX = "github:repos";
+const PR_CACHE_PREFIX = "github:pulls";
+const PR_DETAILS_CACHE_PREFIX = "github:pr-details";
+const DIFF_CACHE_PREFIX = "github:diff";
+
 export async function list(
   owner: string,
   { page = 1, per_page = 10 }: PaginationParams = {}
 ): Promise<PaginatedResponse<Repository>> {
+  // Generate cache key based on owner and pagination params
+  const cacheKey = generateCacheKey(CACHE_PREFIX, { owner, page, per_page });
+
+  // Try to get cached data
+  const cached = await getCached<PaginatedResponse<Repository>>(cacheKey);
+  if (cached) {
+    logger.info({
+      message: "Cache hit for repository list",
+      owner,
+      page,
+      per_page,
+    });
+    return cached;
+  }
+
+  // If not in cache, fetch from GitHub API
   const response = await octokit.repos.listForUser({
     username: owner,
     page,
@@ -33,7 +55,7 @@ export async function list(
   );
   const totalPages = Math.ceil(totalCount / per_page);
 
-  return {
+  const result = {
     data: response.data.map((repo) => ({
       id: repo.id,
       name: repo.name,
@@ -53,6 +75,11 @@ export async function list(
       has_previous: page > 1,
     },
   };
+
+  // Cache the result
+  await setCached(cacheKey, result);
+
+  return result;
 }
 
 export async function read(owner: string, repository: string) {
@@ -66,6 +93,30 @@ async function listPullRequests(
   { page = 1, per_page = 10 }: PaginationParams = {}
 ): Promise<PaginatedResponse<PullRequest>> {
   try {
+    // Generate cache key for the PR list
+    const listCacheKey = generateCacheKey(PR_CACHE_PREFIX, {
+      owner,
+      repo: repoName,
+      page,
+      per_page,
+    });
+
+    // Try to get cached PR list
+    const cachedList = await getCached<PaginatedResponse<PullRequest>>(
+      listCacheKey
+    );
+    if (cachedList) {
+      logger.info({
+        message: "Cache hit for pull request list",
+        owner,
+        repo: repoName,
+        page,
+        per_page,
+      });
+      return cachedList;
+    }
+
+    // If not in cache, fetch from GitHub API
     const response = await octokit.pulls.list({
       owner,
       repo: repoName,
@@ -94,11 +145,56 @@ async function listPullRequests(
     // Fetch detailed PR data including statistics
     const pullRequests = await Promise.all(
       response.data.map(async (pr) => {
-        const details = await octokit.pulls.get({
+        // Generate cache key for individual PR details
+        const detailsCacheKey = generateCacheKey(PR_DETAILS_CACHE_PREFIX, {
           owner,
           repo: repoName,
-          pull_number: pr.number,
+          number: pr.number,
         });
+
+        // Try to get cached PR details
+        const cachedDetails = await getCached<{
+          comments: number;
+          additions: number;
+          deletions: number;
+          body_preview: string | null;
+        }>(detailsCacheKey);
+
+        let details;
+        if (cachedDetails) {
+          logger.info({
+            message: "Cache hit for pull request details",
+            owner,
+            repo: repoName,
+            number: pr.number,
+          });
+          details = cachedDetails;
+        } else {
+          // If not in cache, fetch from GitHub API
+          const detailsResponse = await octokit.pulls.get({
+            owner,
+            repo: repoName,
+            pull_number: pr.number,
+          });
+
+          // Create body preview by removing newlines and extra spaces
+          const bodyPreview = detailsResponse.data.body
+            ? detailsResponse.data.body
+                .replace(/[\n\r]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .substring(0, 200)
+            : null;
+
+          details = {
+            comments: detailsResponse.data.comments ?? 0,
+            additions: detailsResponse.data.additions ?? 0,
+            deletions: detailsResponse.data.deletions ?? 0,
+            body_preview: bodyPreview,
+          };
+          // Cache the PR details with a shorter TTL (2 minutes)
+          await setCached(detailsCacheKey, details, 120);
+        }
 
         return {
           id: pr.id,
@@ -108,23 +204,17 @@ async function listPullRequests(
           user: {
             login: pr.user?.login ?? "unknown",
           },
-          comments: details.data.comments ?? 0,
-          additions: details.data.additions ?? 0,
-          deletions: details.data.deletions ?? 0,
+          comments: details.comments,
+          additions: details.additions,
+          deletions: details.deletions,
           created_at: pr.created_at ?? new Date().toISOString(),
           updated_at: pr.updated_at ?? new Date().toISOString(),
-          body_preview: pr.body
-            ? pr.body
-                .replace(/[\n\r]/g, " ")
-                .replace(/\s+/g, " ")
-                .trim()
-                .substring(0, 200)
-            : null,
+          body_preview: details.body_preview,
         };
       })
     );
 
-    return {
+    const result = {
       data: pullRequests,
       pagination: {
         current_page: page,
@@ -135,6 +225,11 @@ async function listPullRequests(
         has_previous: page > 1,
       },
     };
+
+    // Cache the full PR list with a shorter TTL (2 minutes)
+    await setCached(listCacheKey, result, 120);
+
+    return result;
   } catch (error) {
     logger.error({
       message: "Failed to fetch pull requests from GitHub",
@@ -188,6 +283,26 @@ export async function getDiff(
   pullNumber: number
 ) {
   try {
+    // Generate cache key for the diff
+    const diffCacheKey = generateCacheKey(DIFF_CACHE_PREFIX, {
+      owner,
+      repo: repoName,
+      number: pullNumber,
+    });
+
+    // Try to get cached diff
+    const cachedDiff = await getCached<string>(diffCacheKey);
+    if (cachedDiff) {
+      logger.info({
+        message: "Cache hit for pull request diff",
+        owner,
+        repo: repoName,
+        number: pullNumber,
+      });
+      return cachedDiff;
+    }
+
+    // If not in cache, fetch from GitHub API
     const response = await octokit.request({
       method: "GET",
       url: `/repos/${owner}/${repoName}/pulls/${pullNumber}`,
@@ -200,7 +315,13 @@ export async function getDiff(
       throw new Error("Empty response from GitHub API");
     }
 
-    return sanitizeDiff(response.data as string);
+    const sanitizedDiff = sanitizeDiff(response.data as string);
+
+    // Cache the sanitized diff with a short TTL (1 minute)
+    // We use a shorter TTL for diffs since they can change frequently
+    await setCached(diffCacheKey, sanitizedDiff, 60);
+
+    return sanitizedDiff;
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not Found")) {
       throw new StatusError("Pull request not found", 404, {
