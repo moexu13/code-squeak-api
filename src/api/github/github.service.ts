@@ -157,6 +157,7 @@ async function listPullRequests(
           comments: number;
           additions: number;
           deletions: number;
+          body_preview: string | null;
         }>(detailsCacheKey);
 
         let details;
@@ -175,10 +176,21 @@ async function listPullRequests(
             repo: repoName,
             pull_number: pr.number,
           });
+
+          // Create body preview by removing newlines and extra spaces
+          const bodyPreview = detailsResponse.data.body
+            ? detailsResponse.data.body
+                .replace(/[\n\r]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim()
+                .substring(0, 200)
+            : null;
+
           details = {
             comments: detailsResponse.data.comments ?? 0,
             additions: detailsResponse.data.additions ?? 0,
             deletions: detailsResponse.data.deletions ?? 0,
+            body_preview: bodyPreview,
           };
           // Cache the PR details with a shorter TTL (2 minutes)
           await setCached(detailsCacheKey, details, 120);
@@ -197,13 +209,7 @@ async function listPullRequests(
           deletions: details.deletions,
           created_at: pr.created_at ?? new Date().toISOString(),
           updated_at: pr.updated_at ?? new Date().toISOString(),
-          body_preview: pr.body
-            ? pr.body
-                .replace(/[\n\r]/g, " ")
-                .replace(/\s+/g, " ")
-                .trim()
-                .substring(0, 200)
-            : null,
+          body_preview: details.body_preview,
         };
       })
     );
