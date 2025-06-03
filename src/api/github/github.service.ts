@@ -140,6 +140,14 @@ async function listPullRequests(
     );
 
     if (!response.data) {
+      logger.error({
+        message: "Empty response from GitHub API",
+        context: {
+          owner,
+          repo: repoName,
+          status: response.status,
+        },
+      });
       throw new GitHubError("Empty response from GitHub API", {
         owner,
         repo: repoName,
@@ -281,6 +289,14 @@ export async function create(
     );
 
     if (!response?.data) {
+      logger.error({
+        message: "Empty response from GitHub API",
+        context: {
+          owner,
+          repo: repoName,
+          pullNumber,
+        },
+      });
       throw new Error("Empty response from GitHub API");
     }
   } catch (error) {
@@ -330,6 +346,14 @@ export async function getDiff(
     );
 
     if (!response?.data) {
+      logger.error({
+        message: "Empty response from GitHub API",
+        context: {
+          owner,
+          repo: repoName,
+          pullNumber,
+        },
+      });
       throw new Error("Empty response from GitHub API");
     }
 
