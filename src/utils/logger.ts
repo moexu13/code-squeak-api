@@ -16,6 +16,11 @@ class Logger {
     this.level = (process.env.LOG_LEVEL as LogLevel) || "info";
   }
 
+  // Add reset method for testing
+  reset() {
+    this.level = (process.env.LOG_LEVEL as LogLevel) || "info";
+  }
+
   private shouldLog(level: LogLevel): boolean {
     const levels: LogLevel[] = ["debug", "info", "warn", "error"];
     return levels.indexOf(level) >= levels.indexOf(this.level);
@@ -38,22 +43,15 @@ class Logger {
     const severity = this.getSentrySeverity(level);
     const logMessage = message || msg || "No message provided";
 
-    // Send to Sentry only for debug level and above
-    if (level === "error" || level === "warn") {
-      if (level === "error") {
-        Sentry.captureException(new Error(logMessage as string), {
-          level: severity,
-          extra: context,
-        });
-      } else {
-        Sentry.captureMessage(logMessage as string, {
-          level: severity,
-          extra: context,
-        });
-      }
+    // Send to Sentry only in production and only for error level
+    if (process.env.NODE_ENV === "production" && level === "error") {
+      Sentry.captureException(new Error(logMessage as string), {
+        level: severity,
+        extra: context,
+      });
     }
 
-    // Console output for development
+    // Console output only in non-production environments
     if (process.env.NODE_ENV !== "production") {
       const timestamp = new Date().toISOString();
       console[level](
