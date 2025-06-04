@@ -1,9 +1,9 @@
 import logger from "../../utils/logger";
 import { getCached, setCached, generateCacheKey } from "../../utils/cache";
 import { DEFAULT_REVIEW_PROMPT } from "./prompts";
-import { AIModel, ModelConfig, ModelResponse } from "./models/base.model";
-import { ClaudeModel } from "./models/claude.model";
+import { ModelConfig, ModelResponse } from "./models/base.model";
 import { getModelSettings } from "./models/config";
+import { ModelFactory } from "./models/factory";
 
 const CACHE_PREFIX = "analysis:diff";
 const DEFAULT_MODEL = process.env.DEFAULT_AI_MODEL || "claude";
@@ -58,7 +58,8 @@ export async function analyze({
   }
 
   try {
-    const aiModel = getModel(model);
+    const settings = getModelSettings(model);
+    const aiModel = ModelFactory.getInstance().createModel(model, settings);
     const formattedPrompt = prompt
       .replace("{diff}", diff)
       .replace("{title}", title)
@@ -82,16 +83,5 @@ export async function analyze({
       diff_length: diff.length,
     });
     throw error;
-  }
-}
-
-function getModel(model: string): AIModel {
-  const settings = getModelSettings(model);
-
-  switch (model.toLowerCase()) {
-    case "claude":
-      return new ClaudeModel(settings);
-    default:
-      throw new Error(`Unsupported model: ${model}`);
   }
 }

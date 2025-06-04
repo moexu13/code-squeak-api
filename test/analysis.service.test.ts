@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { analyze } from "../src/api/analysis/analysis.service";
-import { ClaudeModel } from "../src/api/analysis/models/claude.model";
+import { ModelFactory } from "../src/api/analysis/models/factory";
 
 // Mock the dependencies
-vi.mock("../src/api/analysis/models/claude.model", () => ({
-  ClaudeModel: vi.fn().mockImplementation(() => ({
-    analyze: vi.fn(),
-  })) as unknown as typeof ClaudeModel,
+vi.mock("../src/api/analysis/models/factory", () => ({
+  ModelFactory: {
+    getInstance: vi.fn().mockReturnValue({
+      createModel: vi.fn(),
+    }),
+  },
 }));
 
 vi.mock("../src/api/analysis/models/config", () => ({
@@ -23,24 +25,20 @@ vi.mock("../src/utils/logger");
 
 describe("Analysis Service", () => {
   const mockDiff = "test diff";
+  const mockAnalyze = vi.fn().mockResolvedValue({
+    completion: "test completion",
+    stop_reason: "stop",
+    model: "test-model",
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(ModelFactory.getInstance().createModel).mockReturnValue({
+      analyze: mockAnalyze,
+    });
   });
 
   it("should use default values when not provided", async () => {
-    const mockAnalyze = vi.fn().mockResolvedValue({
-      completion: "test completion",
-      stop_reason: "stop",
-      model: "test-model",
-    });
-    vi.mocked(ClaudeModel).mockImplementation(
-      () =>
-        ({
-          analyze: mockAnalyze,
-        } as unknown as ClaudeModel)
-    );
-
     await analyze({ diff: mockDiff });
 
     expect(mockAnalyze).toHaveBeenCalledWith(
@@ -53,18 +51,6 @@ describe("Analysis Service", () => {
   });
 
   it("should use provided values when available", async () => {
-    const mockAnalyze = vi.fn().mockResolvedValue({
-      completion: "test completion",
-      stop_reason: "stop",
-      model: "test-model",
-    });
-    vi.mocked(ClaudeModel).mockImplementation(
-      () =>
-        ({
-          analyze: mockAnalyze,
-        } as unknown as ClaudeModel)
-    );
-
     const customParams = {
       diff: mockDiff,
       max_tokens: 2000,
@@ -89,12 +75,9 @@ describe("Analysis Service", () => {
 
   it("should handle errors gracefully", async () => {
     const mockError = new Error("Test error");
-    vi.mocked(ClaudeModel).mockImplementation(
-      () =>
-        ({
-          analyze: vi.fn().mockRejectedValue(mockError),
-        } as unknown as ClaudeModel)
-    );
+    vi.mocked(ModelFactory.getInstance().createModel).mockReturnValue({
+      analyze: vi.fn().mockRejectedValue(mockError),
+    });
 
     await expect(analyze({ diff: mockDiff })).rejects.toThrow("Test error");
   });
