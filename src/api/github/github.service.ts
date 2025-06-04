@@ -2,6 +2,7 @@ import { Octokit } from "@octokit/rest";
 import logger from "../../utils/logger";
 import { GitHubError } from "../../errors/github";
 import { sanitizeDiff } from "../../utils/sanitize";
+import { CircuitBreaker } from "../../utils/circuitBreaker";
 import {
   Repository,
   PullRequest,
@@ -20,6 +21,13 @@ const CACHE_PREFIX = "github:repos";
 const PR_CACHE_PREFIX = "github:pulls";
 const PR_DETAILS_CACHE_PREFIX = "github:pr-details";
 const DIFF_CACHE_PREFIX = "github:diff";
+
+const circuitBreaker = new CircuitBreaker({
+  failureThreshold: 3,
+  resetTimeout: 10000,
+  halfOpenTimeout: 5000,
+  successThreshold: 2,
+});
 
 export async function list(
   owner: string,
@@ -41,12 +49,14 @@ export async function list(
   }
 
   // If not in cache, fetch from GitHub API
-  const response = await octokit.repos.listForUser({
-    username: owner,
-    page,
-    per_page,
-    sort: "updated",
-  });
+  const response = await fetchWithBreaker(circuitBreaker, () =>
+    octokit.repos.listForUser({
+      username: owner,
+      page,
+      per_page,
+      sort: "updated",
+    })
+  );
 
   // Get total count from the Link header if available
   const totalCount = parseInt(
@@ -117,17 +127,27 @@ async function listPullRequests(
     }
 
     // If not in cache, fetch from GitHub API
-    const response = await octokit.pulls.list({
-      owner,
-      repo: repoName,
-      state: "open",
-      sort: "updated",
-      direction: "desc",
-      page,
-      per_page,
-    });
+    const response = await fetchWithBreaker(circuitBreaker, () =>
+      octokit.pulls.list({
+        owner,
+        repo: repoName,
+        state: "open",
+        sort: "updated",
+        direction: "desc",
+        page,
+        per_page,
+      })
+    );
 
     if (!response.data) {
+      logger.error({
+        message: "Empty response from GitHub API",
+        context: {
+          owner,
+          repo: repoName,
+          status: response.status,
+        },
+      });
       throw new GitHubError("Empty response from GitHub API", {
         owner,
         repo: repoName,
@@ -171,11 +191,13 @@ async function listPullRequests(
           details = cachedDetails;
         } else {
           // If not in cache, fetch from GitHub API
-          const detailsResponse = await octokit.pulls.get({
-            owner,
-            repo: repoName,
-            pull_number: pr.number,
-          });
+          const detailsResponse = await fetchWithBreaker(circuitBreaker, () =>
+            octokit.pulls.get({
+              owner,
+              repo: repoName,
+              pull_number: pr.number,
+            })
+          );
 
           // Create body preview by removing newlines and extra spaces
           const bodyPreview = detailsResponse.data.body
@@ -257,14 +279,24 @@ export async function create(
   body: string
 ): Promise<void> {
   try {
-    const response = await octokit.issues.createComment({
-      owner,
-      repo: repoName,
-      issue_number: pullNumber,
-      body,
-    });
+    const response = await fetchWithBreaker(circuitBreaker, () =>
+      octokit.issues.createComment({
+        owner,
+        repo: repoName,
+        issue_number: pullNumber,
+        body,
+      })
+    );
 
     if (!response?.data) {
+      logger.error({
+        message: "Empty response from GitHub API",
+        context: {
+          owner,
+          repo: repoName,
+          pullNumber,
+        },
+      });
       throw new Error("Empty response from GitHub API");
     }
   } catch (error) {
@@ -303,15 +335,25 @@ export async function getDiff(
     }
 
     // If not in cache, fetch from GitHub API
-    const response = await octokit.request({
-      method: "GET",
-      url: `/repos/${owner}/${repoName}/pulls/${pullNumber}`,
-      headers: {
-        accept: "application/vnd.github.v3.diff",
-      },
-    });
+    const response = await fetchWithBreaker(circuitBreaker, () =>
+      octokit.request({
+        method: "GET",
+        url: `/repos/${owner}/${repoName}/pulls/${pullNumber}`,
+        headers: {
+          accept: "application/vnd.github.v3.diff",
+        },
+      })
+    );
 
     if (!response?.data) {
+      logger.error({
+        message: "Empty response from GitHub API",
+        context: {
+          owner,
+          repo: repoName,
+          pullNumber,
+        },
+      });
       throw new Error("Empty response from GitHub API");
     }
 
@@ -337,4 +379,11 @@ export async function getDiff(
       originalError: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+async function fetchWithBreaker<T>(
+  breaker: CircuitBreaker,
+  apiCall: () => Promise<T>
+): Promise<T> {
+  return breaker.execute(apiCall);
 }
