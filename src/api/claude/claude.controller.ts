@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
 import asyncErrorBoundary from "../../errors/asyncErrorBoundary";
-import { analyze } from "./analysis.service";
+import { createCompletion } from "./claude.service";
 import { StatusError } from "../../errors";
 
 async function create(req: Request, res: Response) {
-  const { prompt, model, max_tokens, temperature } = req.body;
+  const { prompt, max_tokens, temperature } = req.body;
 
   if (!prompt) {
     throw new StatusError("Prompt is required", 400, {
@@ -14,9 +14,8 @@ async function create(req: Request, res: Response) {
   }
 
   try {
-    const result = await analyze({
+    const result = await createCompletion({
       prompt,
-      model,
       max_tokens,
       temperature,
     });
@@ -25,7 +24,7 @@ async function create(req: Request, res: Response) {
     if (error instanceof StatusError) {
       throw error;
     }
-    throw new StatusError("Error during analysis", 500, {
+    throw new StatusError("Error calling Claude API", 500, {
       path: req.originalUrl,
       method: req.method,
       error: error instanceof Error ? error.message : "Unknown error",

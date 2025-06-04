@@ -17,6 +17,7 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
     "@octokit/app": "^16.0.1",
     "@octokit/auth-app": "^8.0.1",
     "@octokit/rest": "^21.1.1",

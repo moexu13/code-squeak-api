@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import express from "express";
-import analysisRouter from "../src/api/analysis/analysis.router";
+import analysisRouter from "../src/api/analysis/analysis.routes";
 
 describe("Analysis Endpoint", () => {
   const app = express();

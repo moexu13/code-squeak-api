@@ -2,7 +2,7 @@ import { config } from "./config/env";
 import ViteExpress from "vite-express";
 import logger from "./utils/logger";
 
-import analysisRouter from "./api/analysis/analysis.router";
+import analysisRouter from "./api/analysis/analysis.routes";
 import githubRouter from "./api/github/github.routes";
 import errorHandler from "./errors/errorHandler";
 import { NotFoundError } from "./errors/http";
