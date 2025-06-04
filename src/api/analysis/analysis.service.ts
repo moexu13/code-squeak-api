@@ -14,6 +14,11 @@ export interface AnalysisParams {
   max_tokens?: number;
   temperature?: number;
   model?: string;
+  title?: string;
+  description?: string;
+  author?: string;
+  state?: string;
+  url?: string;
 }
 
 export type AnalysisResult = ModelResponse;
@@ -24,6 +29,11 @@ export async function analyze({
   max_tokens,
   temperature,
   model = DEFAULT_MODEL,
+  title = "Pull Request",
+  description = "",
+  author = "Unknown",
+  state = "open",
+  url = "",
 }: AnalysisParams): Promise<AnalysisResult> {
   const cacheKey = generateCacheKey(CACHE_PREFIX, {
     diff,
@@ -31,6 +41,11 @@ export async function analyze({
     max_tokens,
     temperature,
     model,
+    title,
+    description,
+    author,
+    state,
+    url,
   });
 
   const cached = await getCached<AnalysisResult>(cacheKey);
@@ -46,11 +61,11 @@ export async function analyze({
     const aiModel = getModel(model);
     const formattedPrompt = prompt
       .replace("{diff}", diff)
-      .replace("{title}", "Pull Request")
-      .replace("{description}", "")
-      .replace("{author}", "Unknown")
-      .replace("{state}", "open")
-      .replace("{url}", "");
+      .replace("{title}", title)
+      .replace("{description}", description)
+      .replace("{author}", author)
+      .replace("{state}", state)
+      .replace("{url}", url);
 
     const config: ModelConfig = {
       max_tokens,

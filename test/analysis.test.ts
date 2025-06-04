@@ -8,9 +8,10 @@ describe("Analysis Endpoint", () => {
   app.use(express.json());
   app.use("/api/v1/code-analysis", analysisRouter);
 
-  it("should return 200 for GET request", async () => {
+  it("should return 200 for POST request", async () => {
     const response = await request(app)
-      .get("/api/v1/code-analysis")
+      .post("/api/v1/code-analysis")
+      .send({ diff: "test diff" })
       .expect("Content-Type", /json/)
       .expect(200);
 
