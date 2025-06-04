@@ -48,14 +48,25 @@ describe("Logger", () => {
     });
 
     it("should send errors to Sentry but not console", () => {
-      logger.error({ message: "Test error", context: { foo: "bar" } });
+      logger.error({
+        message: "Failed to fetch GitHub repository",
+        context: {
+          owner: "test-org",
+          repo: "test-repo",
+          status: 404,
+        },
+      });
 
       expect(Sentry.captureException).toHaveBeenCalledWith(
         expect.any(Error),
         expect.objectContaining({
           level: "error",
           extra: expect.objectContaining({
-            context: { foo: "bar" },
+            context: {
+              owner: "test-org",
+              repo: "test-repo",
+              status: 404,
+            },
           }),
         })
       );
@@ -80,13 +91,24 @@ describe("Logger", () => {
     });
 
     it("should log errors to console but not Sentry", () => {
-      logger.error({ message: "Test error", context: { foo: "bar" } });
+      logger.error({
+        message: "Failed to fetch GitHub repository",
+        context: {
+          owner: "test-org",
+          repo: "test-repo",
+          status: 404,
+        },
+      });
 
       expect(Sentry.captureException).not.toHaveBeenCalled();
       expect(mockConsole.error).toHaveBeenCalledWith(
-        expect.stringContaining("ERROR: Test error"),
+        expect.stringContaining("ERROR: Failed to fetch GitHub repository"),
         expect.objectContaining({
-          context: { foo: "bar" },
+          context: {
+            owner: "test-org",
+            repo: "test-repo",
+            status: 404,
+          },
         })
       );
     });
