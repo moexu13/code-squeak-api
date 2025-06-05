@@ -11,6 +11,13 @@ export class HttpError extends Error {
   }
 }
 
+export class BadRequestError extends HttpError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, 400, context);
+    this.name = "BadRequestError";
+  }
+}
+
 export class NotFoundError extends HttpError {
   constructor(message: string, context?: Record<string, unknown>) {
     super(message, 404, context);
