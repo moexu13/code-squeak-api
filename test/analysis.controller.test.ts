@@ -112,4 +112,55 @@ describe("Analysis Controller", () => {
       model: "test-model",
     });
   });
+
+  it("should send diff to Claude with default prompt", async () => {
+    const testDiff = `
+diff --git a/src/file1.ts b/src/file1.ts
+index abc123..def456 789
+--- a/src/file1.ts
++++ b/src/file1.ts
+@@ -1,5 +1,5 @@
+-const oldCode = "test";
++const newCode = "test";
+`;
+
+    const response = await request(app)
+      .post("/api/v1/code-analysis")
+      .send({ diff: testDiff })
+      .expect(200);
+
+    // Verify the response
+    expect(response.body).toHaveProperty("data");
+    expect(response.body.data).toEqual({
+      completion: "test completion",
+      stop_reason: "stop",
+      model: "test-model",
+    });
+
+    // Verify the model was called with correct parameters
+    expect(mockAnalyze).toHaveBeenCalledTimes(1);
+    const [prompt, config] = mockAnalyze.mock.calls[0];
+
+    // Verify the prompt contains the diff
+    expect(prompt).toContain(testDiff);
+
+    // Verify the prompt contains the expected structure with default values
+    expect(prompt).toContain("Title: Pull Request");
+    expect(prompt).toContain("Description: ");
+    expect(prompt).toContain("Author: Unknown");
+    expect(prompt).toContain("State: open");
+    expect(prompt).toContain("URL: ");
+    expect(prompt).toContain("Please provide a concise analysis focusing on:");
+    expect(prompt).toContain("1. Code quality and maintainability");
+    expect(prompt).toContain(
+      "2. Idiomatic code and adherence to best practices"
+    );
+    expect(prompt).toContain("3. Potential bugs or edge cases");
+
+    // Verify default config values
+    expect(config).toEqual({
+      max_tokens: undefined,
+      temperature: undefined,
+    });
+  });
 });
