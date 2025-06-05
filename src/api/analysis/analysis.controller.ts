@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
+import asyncErrorBoundary from "../../errors/asyncErrorBoundary";
 
-async function list(_req: Request, res: Response) {
+async function create(_req: Request, res: Response) {
   res.send({ data: "Hello World" });
 }
 
 export default {
-  list,
+  create: asyncErrorBoundary(create),
 };
