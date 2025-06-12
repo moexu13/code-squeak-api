@@ -20,7 +20,7 @@ export function getModelSettings(model: string): ModelSettings {
 
   // If model is just "claude", use the default from env
   if (model.toLowerCase() === "claude") {
-    model = process.env.CLAUDE_MODEL || "claude-3-sonnet-20240229";
+    model = process.env.DEFAULT_MODEL || "claude-3-sonnet-20240229";
   }
 
   // Check if the model is supported
@@ -35,7 +35,7 @@ export function getModelSettings(model: string): ModelSettings {
   return {
     apiKey: process.env.ANTHROPIC_API_KEY || "",
     model,
-    maxTokens: parseInt(process.env.CLAUDE_MAX_TOKENS || "1000"),
-    temperature: parseFloat(process.env.CLAUDE_TEMPERATURE || "0.7"),
+    maxTokens: parseInt(process.env.MAX_TOKENS || "1000", 10),
+    temperature: parseFloat(process.env.TEMPERATURE || "0.7"),
   };
 }
