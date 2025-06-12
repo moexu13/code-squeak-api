@@ -281,12 +281,14 @@ export async function create(
   body: string
 ): Promise<{ id: number; body: string }> {
   try {
-    const response = await octokit.issues.createComment({
-      owner,
-      repo: repoName,
-      issue_number: pullNumber,
-      body: `${COMMENT_HEADER}\n\n${body}`,
-    });
+    const response = await fetchWithBreaker(circuitBreaker, () =>
+      octokit.issues.createComment({
+        owner,
+        repo: repoName,
+        issue_number: pullNumber,
+        body: `${COMMENT_HEADER}\n\n${body}`,
+      })
+    );
 
     if (!response?.data?.id) {
       throw new GitHubError("Failed to create pull request comment", {
