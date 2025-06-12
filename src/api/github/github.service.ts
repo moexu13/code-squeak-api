@@ -1,7 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import logger from "../../utils/logger";
 import { GitHubError } from "../../errors/github";
-import { sanitizeDiff } from "../../utils/sanitize";
+import { sanitizeDiff, sanitizeErrorMessage } from "../../utils/sanitize";
 import { CircuitBreaker } from "../../utils/circuitBreaker";
 import {
   Repository,
@@ -28,6 +28,8 @@ const circuitBreaker = new CircuitBreaker({
   halfOpenTimeout: 5000,
   successThreshold: 2,
 });
+
+export const COMMENT_HEADER = "🐀 CodeSqueak AI Review";
 
 export async function list(
   owner: string,
@@ -277,34 +279,57 @@ export async function create(
   repoName: string,
   pullNumber: number,
   body: string
-): Promise<void> {
+): Promise<{ id: number; body: string }> {
   try {
     const response = await fetchWithBreaker(circuitBreaker, () =>
       octokit.issues.createComment({
         owner,
         repo: repoName,
         issue_number: pullNumber,
-        body,
+        body: `${COMMENT_HEADER}\n\n${body}`,
       })
     );
 
-    if (!response?.data) {
-      logger.error({
-        message: "Empty response from GitHub API",
-        context: {
-          owner,
-          repo: repoName,
-          pullNumber,
-        },
+    if (!response?.data?.id) {
+      throw new GitHubError("Failed to create pull request comment", {
+        owner,
+        repo: repoName,
+        pull_number: pullNumber,
+        error: "Empty response data",
       });
-      throw new Error("Empty response from GitHub API");
     }
+
+    return {
+      id: response.data.id,
+      body: response.data.body || "",
+    };
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    const sanitizedError = sanitizeErrorMessage(errorMessage);
+
+    logger.error({
+      message: "Failed to create comment",
+      error: sanitizedError,
+      owner,
+      repo: repoName,
+      pull_number: pullNumber,
+    });
+
+    if (error instanceof Error && errorMessage.includes("Not Found")) {
+      throw new GitHubError("Pull request not found", {
+        owner,
+        repo: repoName,
+        pull_number: pullNumber,
+        error: sanitizedError,
+      });
+    }
+
     throw new GitHubError("Failed to create pull request comment", {
       owner,
       repo: repoName,
-      pullNumber,
-      originalError: error instanceof Error ? error.message : String(error),
+      pull_number: pullNumber,
+      error: sanitizedError,
     });
   }
 }

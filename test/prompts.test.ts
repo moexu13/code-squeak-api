@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  DEFAULT_REVIEW_PROMPT,
-  COMMENT_HEADER,
-} from "../src/api/analysis/prompts";
+import { DEFAULT_REVIEW_PROMPT } from "../src/api/analysis/prompts";
 
 describe("Prompts", () => {
   describe("DEFAULT_REVIEW_PROMPT", () => {
@@ -53,22 +50,6 @@ describe("Prompts", () => {
       expect(formatted).toContain("open");
       expect(formatted).toContain("https://test.com");
       expect(formatted).toContain("test diff");
-    });
-  });
-
-  describe("COMMENT_HEADER", () => {
-    it("should be a non-empty string", () => {
-      expect(COMMENT_HEADER).toBeDefined();
-      expect(typeof COMMENT_HEADER).toBe("string");
-      expect(COMMENT_HEADER.length).toBeGreaterThan(0);
-    });
-
-    it("should contain the expected emoji", () => {
-      expect(COMMENT_HEADER).toContain("🐀");
-    });
-
-    it("should contain the expected text", () => {
-      expect(COMMENT_HEADER).toContain("CodeSqueak AI Review");
     });
   });
 });

@@ -31,11 +31,10 @@ export class ModelFactory {
     modelType: string,
     settings: ModelSettings
   ): AIModel {
-    switch (modelType.toLowerCase()) {
-      case "claude":
-        return new ClaudeModel(settings);
-      default:
-        throw new Error(`Unsupported model type: ${modelType}`);
+    if (modelType.toLowerCase().startsWith("claude")) {
+      return new ClaudeModel(settings);
     }
+
+    throw new Error(`Unsupported model type: ${modelType}`);
   }
 }

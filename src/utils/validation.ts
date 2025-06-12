@@ -1,5 +1,8 @@
 import { BadRequestError } from "../errors/http";
-import { AnalysisParams } from "../api/analysis/analysis.service";
+import {
+  AnalysisParams,
+  PRAnalysisParams,
+} from "../api/analysis/analysis.service";
 
 // Constants for validation
 export const MAX_DIFF_SIZE = 1024 * 1024; // 1MB
@@ -10,20 +13,28 @@ export const MAX_STRING_LENGTH = 1000;
  * @throws {BadRequestError} if validation fails
  */
 export function validateAndSanitizeParams(
-  params: AnalysisParams
-): AnalysisParams {
-  const { diff, ...rest } = params;
-
-  // Validate diff
-  validateDiff(diff);
-
-  // Sanitize other parameters
-  const sanitizedRest = sanitizeStringParams(rest);
-
-  return {
-    ...sanitizedRest,
-    diff: `[SCRUBBED: ${diff.length} chars]`,
-  };
+  params: AnalysisParams | PRAnalysisParams
+): AnalysisParams | PRAnalysisParams {
+  if ("diff" in params) {
+    const { diff, ...rest } = params as AnalysisParams;
+    validateDiff(diff);
+    const sanitizedRest = sanitizeStringParams(rest);
+    return {
+      ...sanitizedRest,
+      diff: `[SCRUBBED: ${diff.length} chars]`,
+    } as AnalysisParams;
+  } else {
+    const prParams = params as PRAnalysisParams;
+    const sanitized = {
+      owner: prParams.owner.slice(0, MAX_STRING_LENGTH),
+      repo: prParams.repo.slice(0, MAX_STRING_LENGTH),
+      pull_number: prParams.pull_number,
+      model: prParams.model?.slice(0, MAX_STRING_LENGTH),
+      max_tokens: prParams.max_tokens,
+      temperature: prParams.temperature,
+    };
+    return sanitized as PRAnalysisParams;
+  }
 }
 
 /**
