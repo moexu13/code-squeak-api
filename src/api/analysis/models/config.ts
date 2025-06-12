@@ -11,16 +11,31 @@ export interface ModelConfigOptions {
 }
 
 export function getModelSettings(model: string): ModelSettings {
-  switch (model.toLowerCase()) {
-    case "claude":
-      return {
-        apiKey: process.env.ANTHROPIC_API_KEY || "",
-        model: process.env.CLAUDE_MODEL || "claude-3-sonnet-20240229",
-        maxTokens: parseInt(process.env.CLAUDE_MAX_TOKENS || "1000"),
-        temperature: parseFloat(process.env.CLAUDE_TEMPERATURE || "0.7"),
-      };
-    // Add other models here
-    default:
-      throw new Error(`Unsupported model: ${model}`);
+  // List of supported models
+  const supportedModels = [
+    "claude-3-sonnet-20240229",
+    "claude-3-opus-20240229",
+    "claude-3-haiku-20240307",
+  ];
+
+  // If model is just "claude", use the default from env
+  if (model.toLowerCase() === "claude") {
+    model = process.env.CLAUDE_MODEL || "claude-3-sonnet-20240229";
   }
+
+  // Check if the model is supported
+  if (!supportedModels.includes(model)) {
+    throw new Error(
+      `Unsupported model: ${model}. Supported models are: ${supportedModels.join(
+        ", "
+      )}`
+    );
+  }
+
+  return {
+    apiKey: process.env.ANTHROPIC_API_KEY || "",
+    model,
+    maxTokens: parseInt(process.env.CLAUDE_MAX_TOKENS || "1000"),
+    temperature: parseFloat(process.env.CLAUDE_TEMPERATURE || "0.7"),
+  };
 }
