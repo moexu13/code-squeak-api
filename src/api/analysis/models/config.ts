@@ -18,9 +18,9 @@ export function getModelSettings(model: string): ModelSettings {
     "claude-3-haiku-20240307",
   ];
 
-  // If model is just "claude", use the default from env
-  if (model.toLowerCase() === "claude") {
-    model = process.env.DEFAULT_MODEL || "claude-3-sonnet-20240229";
+  // If model is not specified, use the default from env
+  if (!model) {
+    model = process.env.DEFAULT_MODEL || "claude-3-5-haiku-latest";
   }
 
   // Check if the model is supported
