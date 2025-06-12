@@ -31,14 +31,10 @@ export class ModelFactory {
     modelType: string,
     settings: ModelSettings
   ): AIModel {
-    // Extract the base model type from the full model name
-    const baseModelType = modelType.split("-")[0].toLowerCase();
-
-    switch (baseModelType) {
-      case "claude":
-        return new ClaudeModel(settings);
-      default:
-        throw new Error(`Unsupported model type: ${modelType}`);
+    if (modelType.toLowerCase().startsWith("claude")) {
+      return new ClaudeModel(settings);
     }
+
+    throw new Error(`Unsupported model type: ${modelType}`);
   }
 }
