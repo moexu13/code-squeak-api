@@ -7,7 +7,7 @@
     "dev": "ts-node-dev --respawn src/server.ts",
     "build": "vite build",
     "start": "node dist/server.js",
-    "test": "vitest",
+    "test": "vitest run",
     "list-models": "ts-node src/scripts/list-models.ts"
   },
   "devDependencies": {
