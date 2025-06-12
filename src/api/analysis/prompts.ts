@@ -18,5 +18,3 @@ Please provide a concise analysis focusing on:
 
 Keep the analysis focused on the technical aspects of the changes. Suggest improvements 
 and explain your reasoning for each suggestion.`;
-
-export const COMMENT_HEADER = "🐀 CodeSqueak AI Review";

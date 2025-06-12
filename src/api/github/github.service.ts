@@ -29,6 +29,8 @@ const circuitBreaker = new CircuitBreaker({
   successThreshold: 2,
 });
 
+export const COMMENT_HEADER = "🐀 CodeSqueak AI Review";
+
 export async function list(
   owner: string,
   { page = 1, per_page = 10 }: PaginationParams = {}
@@ -277,34 +279,51 @@ export async function create(
   repoName: string,
   pullNumber: number,
   body: string
-): Promise<void> {
+): Promise<{ id: number; body: string }> {
   try {
-    const response = await fetchWithBreaker(circuitBreaker, () =>
-      octokit.issues.createComment({
+    const response = await octokit.issues.createComment({
+      owner,
+      repo: repoName,
+      issue_number: pullNumber,
+      body: `${COMMENT_HEADER}\n\n${body}`,
+    });
+
+    if (!response?.data?.id) {
+      throw new GitHubError("Failed to create pull request comment", {
         owner,
         repo: repoName,
-        issue_number: pullNumber,
-        body,
-      })
-    );
-
-    if (!response?.data) {
-      logger.error({
-        message: "Empty response from GitHub API",
-        context: {
-          owner,
-          repo: repoName,
-          pullNumber,
-        },
+        pull_number: pullNumber,
+        error: "Empty response data",
       });
-      throw new Error("Empty response from GitHub API");
     }
+
+    return {
+      id: response.data.id,
+      body: response.data.body || "",
+    };
   } catch (error) {
+    logger.error({
+      message: "Failed to create comment",
+      error: error instanceof Error ? error.message : "Unknown error",
+      owner,
+      repo: repoName,
+      pull_number: pullNumber,
+    });
+
+    if (error instanceof Error && error.message.includes("Not Found")) {
+      throw new GitHubError("Pull request not found", {
+        owner,
+        repo: repoName,
+        pull_number: pullNumber,
+        error: error.message,
+      });
+    }
+
     throw new GitHubError("Failed to create pull request comment", {
       owner,
       repo: repoName,
-      pullNumber,
-      originalError: error instanceof Error ? error.message : String(error),
+      pull_number: pullNumber,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }

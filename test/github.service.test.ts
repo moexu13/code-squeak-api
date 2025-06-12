@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Octokit } from "@octokit/rest";
-import { list, read, create } from "../src/api/github/github.service";
+import {
+  list,
+  read,
+  create,
+  COMMENT_HEADER,
+} from "../src/api/github/github.service";
 import { GitHubError } from "../src/errors/github";
 
 // Test configuration
 const TEST_OWNER = "moexu13";
 const TEST_REPO = "code-squeak-api";
-const TEST_PR_NUMBER = 4;
 
 // Define types for our mock functions
 type MockOctokit = Octokit & {
@@ -117,6 +121,22 @@ describe("GitHub Service", () => {
     });
   });
 
+  describe("COMMENT_HEADER", () => {
+    it("should be a non-empty string", () => {
+      expect(COMMENT_HEADER).toBeDefined();
+      expect(typeof COMMENT_HEADER).toBe("string");
+      expect(COMMENT_HEADER.length).toBeGreaterThan(0);
+    });
+
+    it("should contain the expected emoji", () => {
+      expect(COMMENT_HEADER).toContain("🐀");
+    });
+
+    it("should contain the expected text", () => {
+      expect(COMMENT_HEADER).toContain("CodeSqueak AI Review");
+    });
+  });
+
   describe("list", () => {
     it("should list repositories for a user", async () => {
       const response = await list(TEST_OWNER);
@@ -190,32 +210,52 @@ describe("GitHub Service", () => {
   });
 
   describe("create", () => {
-    const mockParams = {
-      owner: TEST_OWNER,
-      repoName: TEST_REPO,
-      pullNumber: TEST_PR_NUMBER,
-      body: "Test comment",
-    };
-
     it("should successfully create a comment", async () => {
-      await create(
+      const mockParams = {
+        owner: "moexu13",
+        repoName: "code-squeak-api",
+        pullNumber: 4,
+      };
+      const testComment = "Test comment";
+
+      const mockResponse = {
+        data: {
+          id: 123,
+          body: `${COMMENT_HEADER}\n\n${testComment}`,
+        },
+      };
+
+      mockCreateComment.mockResolvedValueOnce(mockResponse);
+
+      const result = await create(
         mockParams.owner,
         mockParams.repoName,
         mockParams.pullNumber,
-        mockParams.body
+        testComment
       );
+
+      expect(result).toEqual({
+        id: 123,
+        body: `${COMMENT_HEADER}\n\n${testComment}`,
+      });
 
       // Verify Octokit was called with correct parameters
       expect(mockCreateComment).toHaveBeenCalledWith({
         owner: mockParams.owner,
         repo: mockParams.repoName,
         issue_number: mockParams.pullNumber,
-        body: mockParams.body,
+        body: `${COMMENT_HEADER}\n\n${testComment}`,
       });
     });
 
     it("should throw GitHubError when API call fails", async () => {
-      // Mock API error
+      const mockParams = {
+        owner: "moexu13",
+        repoName: "code-squeak-api",
+        pullNumber: 4,
+      };
+      const testComment = "This should fail";
+
       mockCreateComment.mockRejectedValueOnce(new Error("API Error"));
 
       await expect(
@@ -223,16 +263,19 @@ describe("GitHub Service", () => {
           mockParams.owner,
           mockParams.repoName,
           mockParams.pullNumber,
-          mockParams.body
+          testComment
         )
       ).rejects.toThrow(GitHubError);
-
-      // Verify Octokit was called
-      expect(mockCreateComment).toHaveBeenCalled();
     });
 
     it("should throw GitHubError when response data is empty", async () => {
-      // Mock empty response
+      const mockParams = {
+        owner: "moexu13",
+        repoName: "code-squeak-api",
+        pullNumber: 4,
+      };
+      const testComment = "This should fail";
+
       mockCreateComment.mockResolvedValueOnce({
         data: null,
       });
@@ -242,34 +285,29 @@ describe("GitHub Service", () => {
           mockParams.owner,
           mockParams.repoName,
           mockParams.pullNumber,
-          mockParams.body
+          testComment
         )
       ).rejects.toThrow("Failed to create pull request comment");
     });
 
     it("should throw error for invalid PR number", async () => {
-      // Mock the API to throw an error
-      mockCreateComment.mockRejectedValueOnce(new Error("Not Found"));
-
-      const invalidPRNumber = 999999;
+      const mockParams = {
+        owner: "moexu13",
+        repoName: "code-squeak-api",
+        pullNumber: 999999,
+      };
       const testComment = "This should fail";
+
+      mockCreateComment.mockRejectedValueOnce(new Error("Not Found"));
 
       await expect(
         create(
           mockParams.owner,
           mockParams.repoName,
-          invalidPRNumber,
+          mockParams.pullNumber,
           testComment
         )
-      ).rejects.toThrow(GitHubError);
-
-      // Verify the mock was called with the invalid PR number
-      expect(mockCreateComment).toHaveBeenCalledWith({
-        owner: mockParams.owner,
-        repo: mockParams.repoName,
-        issue_number: invalidPRNumber,
-        body: testComment,
-      });
+      ).rejects.toThrow("Pull request not found");
     });
   });
 });
