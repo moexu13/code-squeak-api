@@ -8,7 +8,7 @@ import { getDiff, create as createComment } from "../github/github.service";
 import { StatusError } from "../../errors/status";
 
 const CACHE_PREFIX = "analysis:diff";
-const DEFAULT_MODEL = process.env.DEFAULT_AI_MODEL || "claude";
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "claude-3-5-haiku-latest";
 
 export interface AnalysisParams {
   diff: string;
