@@ -1,7 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import logger from "../../utils/logger";
 import { GitHubError } from "../../errors/github";
-import { sanitizeDiff } from "../../utils/sanitize";
+import { sanitizeDiff, sanitizeErrorMessage } from "../../utils/sanitize";
 import { CircuitBreaker } from "../../utils/circuitBreaker";
 import {
   Repository,
@@ -304,20 +304,24 @@ export async function create(
       body: response.data.body || "",
     };
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    const sanitizedError = sanitizeErrorMessage(errorMessage);
+
     logger.error({
       message: "Failed to create comment",
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: sanitizedError,
       owner,
       repo: repoName,
       pull_number: pullNumber,
     });
 
-    if (error instanceof Error && error.message.includes("Not Found")) {
+    if (error instanceof Error && errorMessage.includes("Not Found")) {
       throw new GitHubError("Pull request not found", {
         owner,
         repo: repoName,
         pull_number: pullNumber,
-        error: error.message,
+        error: sanitizedError,
       });
     }
 
@@ -325,7 +329,7 @@ export async function create(
       owner,
       repo: repoName,
       pull_number: pullNumber,
-      error: error instanceof Error ? error.message : String(error),
+      error: sanitizedError,
     });
   }
 }
