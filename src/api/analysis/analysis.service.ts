@@ -9,6 +9,7 @@ import { StatusError } from "../../errors/status";
 
 const CACHE_PREFIX = "analysis:diff";
 const PR_ANALYSIS_CACHE_PREFIX = "analysis:pr";
+const DIFF_CACHE_PREFIX = "diff:pr";
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "claude-3-5-haiku-latest";
 
 export interface AnalysisParams {
@@ -132,14 +133,42 @@ export async function analyzePullRequest({
       return;
     }
 
-    // 1. Get the PR diff
+    // 1. Get the PR diff (with caching)
     logger.info({
       message: "Fetching PR diff",
       owner,
       repo,
       pull_number,
     });
-    const diff = await getDiff(owner, repo, pull_number);
+
+    // Generate cache key for the diff
+    const diffCacheKey = generateCacheKey(DIFF_CACHE_PREFIX, {
+      owner,
+      repo,
+      pull_number,
+    });
+
+    // Try to get cached diff first
+    let diff = await getCached<string>(diffCacheKey);
+    if (!diff) {
+      // If not in cache, fetch from GitHub
+      diff = await getDiff(owner, repo, pull_number);
+      // Cache the diff
+      await setCached(diffCacheKey, diff);
+      logger.info({
+        message: "Cached PR diff",
+        owner,
+        repo,
+        pull_number,
+      });
+    } else {
+      logger.info({
+        message: "Cache hit for PR diff",
+        owner,
+        repo,
+        pull_number,
+      });
+    }
 
     // 2. Analyze the diff
     logger.info({
