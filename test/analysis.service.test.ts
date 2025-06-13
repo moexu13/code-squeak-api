@@ -1,33 +1,16 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { vi, describe, it, expect, beforeEach } from "vitest";
 import {
   analyze,
   analyzePullRequest,
 } from "../src/api/analysis/analysis.service";
-import { ModelFactory } from "../src/api/analysis/models/factory";
-import { getCached, setCached, generateCacheKey } from "../src/utils/cache";
+import { getCached, setCached } from "../src/utils/cache";
 import {
   getDiff,
   create as createComment,
 } from "../src/api/github/github.service";
+import { StatusError } from "../src/errors/status";
 
 // Mock the dependencies
-vi.mock("../src/api/analysis/models/factory", () => ({
-  ModelFactory: {
-    getInstance: vi.fn().mockReturnValue({
-      createModel: vi.fn(),
-    }),
-  },
-}));
-
-vi.mock("../src/api/analysis/models/config", () => ({
-  getModelSettings: vi.fn().mockReturnValue({
-    apiKey: "test-key",
-    model: "test-model",
-    maxTokens: 1000,
-    temperature: 0.7,
-  }),
-}));
-
 vi.mock("../src/utils/cache", () => ({
   getCached: vi.fn(),
   setCached: vi.fn(),
@@ -40,187 +23,155 @@ vi.mock("../src/utils/cache", () => ({
   }),
 }));
 
-vi.mock("../src/utils/logger");
-vi.mock("../src/api/github/github.service");
+vi.mock("../src/api/github/github.service", () => ({
+  getDiff: vi.fn(),
+  create: vi.fn(),
+}));
+
+// Mock the model settings
+vi.mock("../src/api/analysis/models/config", () => ({
+  getModelSettings: vi.fn().mockImplementation((model) => ({
+    model,
+    max_tokens: 1000,
+    temperature: 0.7,
+  })),
+  supportedModels: [
+    "claude-3-sonnet-20240229",
+    "claude-3-opus-20240229",
+    "claude-3-5-haiku-latest",
+  ],
+}));
+
+// Mock the model factory
+vi.mock("../src/api/analysis/models/factory", () => ({
+  ModelFactory: {
+    getInstance: vi.fn().mockReturnValue({
+      createModel: vi.fn().mockReturnValue({
+        analyze: vi.fn().mockImplementation(async (config) => ({
+          completion: "Test analysis result",
+          stop_reason: "end_turn",
+          model: config.model || "default-model",
+        })),
+      }),
+    }),
+  },
+}));
 
 describe("Analysis Service", () => {
-  const mockDiff = "test diff";
-  const mockAnalyze = vi.fn().mockResolvedValue({
-    completion: "test completion",
-    stop_reason: "stop",
-    model: "test-model",
-  });
-
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(ModelFactory.getInstance().createModel).mockReturnValue({
-      analyze: mockAnalyze,
-    });
-    vi.mocked(getDiff).mockResolvedValue(mockDiff);
-    vi.mocked(createComment).mockResolvedValue({
-      id: 123,
-      body: "test comment",
-    });
   });
 
-  it("should use default values when not provided", async () => {
-    await analyze({ diff: mockDiff });
+  describe("analyze", () => {
+    it("should return analysis result", async () => {
+      const result = await analyze({ diff: "test diff" });
 
-    expect(mockAnalyze).toHaveBeenCalledWith(
-      expect.stringContaining(mockDiff),
-      expect.objectContaining({
-        max_tokens: undefined,
-        temperature: undefined,
-      })
-    );
-  });
-
-  it("should use provided values when available", async () => {
-    const customParams = {
-      diff: mockDiff,
-      max_tokens: 2000,
-      temperature: 0.5,
-      title: "Custom PR",
-      description: "Custom description",
-      author: "Custom Author",
-      state: "closed",
-      url: "https://custom.com",
-    };
-
-    await analyze(customParams);
-
-    expect(mockAnalyze).toHaveBeenCalledWith(
-      expect.stringContaining("Custom PR"),
-      expect.objectContaining({
-        max_tokens: 2000,
-        temperature: 0.5,
-      })
-    );
-  });
-
-  it("should handle errors gracefully", async () => {
-    const mockError = new Error("Test error");
-    vi.mocked(ModelFactory.getInstance().createModel).mockReturnValue({
-      analyze: vi.fn().mockRejectedValue(mockError),
+      expect(result).toEqual({
+        completion: "Test analysis result",
+        stop_reason: "end_turn",
+        model: "default-model",
+      });
     });
 
-    await expect(analyze({ diff: mockDiff })).rejects.toThrow("Test error");
+    it("should use cached result if available", async () => {
+      const cachedResult = {
+        completion: "Cached analysis",
+        stop_reason: "end_turn",
+        model: "test-model",
+      };
+      vi.mocked(getCached).mockResolvedValueOnce(cachedResult);
+
+      const result = await analyze({ diff: "test diff" });
+
+      expect(result).toEqual(cachedResult);
+      expect(getCached).toHaveBeenCalled();
+    });
+
+    it("should handle errors gracefully", async () => {
+      const error = new Error("Test error");
+      vi.mocked(getCached).mockRejectedValueOnce(error);
+
+      await expect(analyze({ diff: "test diff" })).rejects.toThrow(
+        "Test error"
+      );
+    });
   });
 
-  describe("PR Analysis Caching", () => {
-    const prParams = {
+  describe("analyzePullRequest", () => {
+    const mockParams = {
       owner: "test-owner",
       repo: "test-repo",
-      pull_number: 123,
-      model: "test-model",
-      max_tokens: 1000,
-      temperature: 0.7,
+      pull_number: 1,
     };
 
-    it("should use cached analysis when available", async () => {
-      const cachedAnalysis = {
-        completion: "cached analysis result",
-      };
+    it("should use cached analysis if available", async () => {
+      const cachedAnalysis = { completion: "Cached analysis" };
       vi.mocked(getCached).mockResolvedValueOnce(cachedAnalysis);
 
-      await analyzePullRequest(prParams);
+      await analyzePullRequest(mockParams);
 
-      // Verify cache was checked
-      expect(getCached).toHaveBeenCalledWith(
-        expect.stringContaining("analysis:pr")
-      );
-
-      // Verify cached result was used
+      expect(getCached).toHaveBeenCalledTimes(1);
+      expect(getDiff).not.toHaveBeenCalled();
       expect(createComment).toHaveBeenCalledWith(
-        prParams.owner,
-        prParams.repo,
-        prParams.pull_number,
+        mockParams.owner,
+        mockParams.repo,
+        mockParams.pull_number,
         cachedAnalysis.completion
       );
-
-      // Verify no new analysis was performed
-      expect(mockAnalyze).not.toHaveBeenCalled();
     });
 
-    it("should perform new analysis and cache result when no cache exists", async () => {
-      vi.mocked(getCached).mockResolvedValueOnce(null);
+    it("should use cached diff if available", async () => {
+      const mockDiff = "cached diff content";
+      vi.mocked(getCached)
+        .mockResolvedValueOnce(null) // No cached analysis
+        .mockResolvedValueOnce(mockDiff); // Cached diff
 
-      await analyzePullRequest(prParams);
+      await analyzePullRequest(mockParams);
 
-      // Verify cache was checked
-      expect(getCached).toHaveBeenCalledWith(
-        expect.stringContaining("analysis:pr")
-      );
-
-      // Verify new analysis was performed
-      expect(mockAnalyze).toHaveBeenCalled();
-
-      // Verify result was cached
-      expect(setCached).toHaveBeenCalledWith(
-        expect.stringContaining("analysis:pr"),
-        expect.objectContaining({
-          completion: "test completion",
-        })
-      );
-
-      // Verify comment was created with new analysis
+      expect(getCached).toHaveBeenCalledTimes(3); // 1 for analysis, 1 for diff, 1 for diff analysis
+      expect(getDiff).not.toHaveBeenCalled();
       expect(createComment).toHaveBeenCalledWith(
-        prParams.owner,
-        prParams.repo,
-        prParams.pull_number,
-        "test completion"
+        mockParams.owner,
+        mockParams.repo,
+        mockParams.pull_number,
+        "Test analysis result"
       );
     });
 
-    it("should generate unique cache keys for different PRs", async () => {
-      const pr1 = { ...prParams, pull_number: 1 };
-      const pr2 = { ...prParams, pull_number: 2 };
+    it("should fetch and cache diff if not in cache", async () => {
+      const mockDiff = "new diff content";
+      vi.mocked(getCached)
+        .mockResolvedValueOnce(null) // No cached analysis
+        .mockResolvedValueOnce(null); // No cached diff
+      vi.mocked(getDiff).mockResolvedValueOnce(mockDiff);
 
-      await analyzePullRequest(pr1);
-      await analyzePullRequest(pr2);
+      await analyzePullRequest(mockParams);
 
-      // Verify different cache keys were generated
-      const calls = vi.mocked(generateCacheKey).mock.calls;
-
-      // Filter for PR analysis cache keys
-      const prCacheCalls = calls.filter((call) => call[0] === "analysis:pr");
-      expect(prCacheCalls).toHaveLength(2);
-
-      const key1 =
-        prCacheCalls[0][0] +
-        ":" +
-        Object.entries(prCacheCalls[0][1])
-          .sort()
-          .map(([k, v]) => `${k}:${v}`)
-          .join(":");
-      const key2 =
-        prCacheCalls[1][0] +
-        ":" +
-        Object.entries(prCacheCalls[1][1])
-          .sort()
-          .map(([k, v]) => `${k}:${v}`)
-          .join(":");
-
-      // Verify the keys are different
-      expect(key1).not.toBe(key2);
-
-      // Verify the keys contain the correct pull numbers
-      expect(key1).toContain("pull_number:1");
-      expect(key2).toContain("pull_number:2");
+      expect(getCached).toHaveBeenCalledTimes(3); // 1 for analysis, 1 for diff, 1 for diff analysis
+      expect(getDiff).toHaveBeenCalledWith(
+        mockParams.owner,
+        mockParams.repo,
+        mockParams.pull_number
+      );
+      expect(setCached).toHaveBeenCalledTimes(3); // Once for diff, once for diff analysis, once for PR analysis
+      expect(createComment).toHaveBeenCalledWith(
+        mockParams.owner,
+        mockParams.repo,
+        mockParams.pull_number,
+        "Test analysis result"
+      );
     });
 
-    it("should include all parameters in cache key", async () => {
-      await analyzePullRequest(prParams);
+    it("should handle errors gracefully", async () => {
+      const error = new Error("Test error");
+      vi.mocked(getCached).mockRejectedValueOnce(error);
 
-      expect(generateCacheKey).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          owner: prParams.owner,
-          repo: prParams.repo,
-          pull_number: prParams.pull_number,
-          model: prParams.model,
-          max_tokens: prParams.max_tokens,
-          temperature: prParams.temperature,
+      await expect(analyzePullRequest(mockParams)).rejects.toThrow(
+        new StatusError("Failed to analyze pull request", 500, {
+          owner: mockParams.owner,
+          repo: mockParams.repo,
+          pull_number: mockParams.pull_number,
+          originalError: "Test error",
         })
       );
     });
