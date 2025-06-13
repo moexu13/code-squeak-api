@@ -8,6 +8,7 @@ import { getDiff, create as createComment } from "../github/github.service";
 import { StatusError } from "../../errors/status";
 
 const CACHE_PREFIX = "analysis:diff";
+const PR_ANALYSIS_CACHE_PREFIX = "analysis:pr";
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "claude-3-5-haiku-latest";
 
 export interface AnalysisParams {
@@ -106,6 +107,31 @@ export async function analyzePullRequest({
   temperature,
 }: PRAnalysisParams): Promise<void> {
   try {
+    // Generate cache key for PR analysis
+    const cacheKey = generateCacheKey(PR_ANALYSIS_CACHE_PREFIX, {
+      owner,
+      repo,
+      pull_number,
+      model,
+      max_tokens,
+      temperature,
+    });
+
+    // Check if we have a cached analysis
+    const cachedAnalysis = await getCached<{ completion: string }>(cacheKey);
+    if (cachedAnalysis) {
+      logger.info({
+        message: "Cache hit for PR analysis",
+        owner,
+        repo,
+        pull_number,
+      });
+
+      // Post the cached analysis as a comment
+      await createComment(owner, repo, pull_number, cachedAnalysis.completion);
+      return;
+    }
+
     // 1. Get the PR diff
     logger.info({
       message: "Fetching PR diff",
@@ -128,6 +154,9 @@ export async function analyzePullRequest({
       max_tokens,
       temperature,
     });
+
+    // Cache the analysis result
+    await setCached(cacheKey, { completion: analysis.completion });
 
     // 3. Post the analysis as a comment
     logger.info({
