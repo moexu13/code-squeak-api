@@ -8,6 +8,8 @@ import { getDiff, create as createComment } from "../github/github.service";
 import { StatusError } from "../../errors/status";
 
 const CACHE_PREFIX = "analysis:diff";
+const PR_ANALYSIS_CACHE_PREFIX = "analysis:pr";
+const DIFF_CACHE_PREFIX = "diff:pr";
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "claude-3-5-haiku-latest";
 
 export interface AnalysisParams {
@@ -106,14 +108,67 @@ export async function analyzePullRequest({
   temperature,
 }: PRAnalysisParams): Promise<void> {
   try {
-    // 1. Get the PR diff
+    // Generate cache key for PR analysis
+    const cacheKey = generateCacheKey(PR_ANALYSIS_CACHE_PREFIX, {
+      owner,
+      repo,
+      pull_number,
+      model,
+      max_tokens,
+      temperature,
+    });
+
+    // Check if we have a cached analysis
+    const cachedAnalysis = await getCached<{ completion: string }>(cacheKey);
+    if (cachedAnalysis) {
+      logger.info({
+        message: "Cache hit for PR analysis",
+        owner,
+        repo,
+        pull_number,
+      });
+
+      // Post the cached analysis as a comment
+      await createComment(owner, repo, pull_number, cachedAnalysis.completion);
+      return;
+    }
+
+    // 1. Get the PR diff (with caching)
     logger.info({
       message: "Fetching PR diff",
       owner,
       repo,
       pull_number,
     });
-    const diff = await getDiff(owner, repo, pull_number);
+
+    // Generate cache key for the diff
+    const diffCacheKey = generateCacheKey(DIFF_CACHE_PREFIX, {
+      owner,
+      repo,
+      pull_number,
+    });
+
+    // Try to get cached diff first
+    let diff = await getCached<string>(diffCacheKey);
+    if (!diff) {
+      // If not in cache, fetch from GitHub
+      diff = await getDiff(owner, repo, pull_number);
+      // Cache the diff
+      await setCached(diffCacheKey, diff);
+      logger.info({
+        message: "Cached PR diff",
+        owner,
+        repo,
+        pull_number,
+      });
+    } else {
+      logger.info({
+        message: "Cache hit for PR diff",
+        owner,
+        repo,
+        pull_number,
+      });
+    }
 
     // 2. Analyze the diff
     logger.info({
@@ -128,6 +183,9 @@ export async function analyzePullRequest({
       max_tokens,
       temperature,
     });
+
+    // Cache the analysis result
+    await setCached(cacheKey, { completion: analysis.completion });
 
     // 3. Post the analysis as a comment
     logger.info({
