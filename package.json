@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "ts-node-dev --respawn src/server.ts",
-    "build": "vite build",
+    "build": "tsc",
     "start": "node dist/server.js",
     "test": "vitest run",
     "list-models": "ts-node src/scripts/list-models.ts",
@@ -19,6 +19,7 @@
     "supertest": "^7.1.1",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "typescript": "^5.8.3",
     "vite": "^6.3.5"
   },
   "dependencies": {
@@ -28,14 +29,12 @@
     "@octokit/rest": "^21.1.1",
     "@sentry/node": "^9.29.0",
     "@unkey/api": "^0.36.0",
-    "code-squeak-api": "link:",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "http-errors": "^2.0.0",
     "ioredis": "^5.6.1",
     "redis": "^5.5.6",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
     "vite-express": "^0.21.1",
     "vitest": "^3.2.3"
   }
