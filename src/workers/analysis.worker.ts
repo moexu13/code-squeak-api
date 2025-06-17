@@ -7,6 +7,7 @@ export class AnalysisWorker {
   private queue: AnalysisQueue;
   private cleanupInterval: NodeJS.Timeout | null = null;
   private statsInterval: NodeJS.Timeout | null = null;
+  private processingPromise: Promise<void> | null = null;
 
   constructor() {
     this.queue = AnalysisQueue.getInstance();
@@ -32,16 +33,12 @@ export class AnalysisWorker {
       logger.info({ message: "Worker started" });
 
       // Start job processing in the background
-      process.nextTick(async () => {
-        try {
-          await this.queue.processJobs();
-        } catch (error) {
-          logger.error({
-            message: "Error in job processing",
-            error: error instanceof Error ? error.message : "Unknown error",
-          });
-          this.isProcessing = false;
-        }
+      this.processingPromise = this.queue.processJobs().catch((error) => {
+        logger.error({
+          message: "Error in job processing",
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        this.isProcessing = false;
       });
 
       // Start cleanup interval (default: every 6 hours)
@@ -120,6 +117,16 @@ export class AnalysisWorker {
       if (this.statsInterval) {
         clearInterval(this.statsInterval);
         this.statsInterval = null;
+      }
+
+      // Wait for processing to stop
+      if (this.processingPromise) {
+        try {
+          await this.processingPromise;
+        } catch (error) {
+          // Ignore errors from stopped processing
+        }
+        this.processingPromise = null;
       }
 
       // Disconnect from Redis

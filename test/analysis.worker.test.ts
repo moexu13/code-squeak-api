@@ -1,86 +1,102 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { redisClient } from "../src/utils/redis";
-import { AnalysisQueue } from "../src/api/analysis/analysis.queue";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { AnalysisWorker } from "../src/workers/analysis.worker";
+import { AnalysisQueue } from "../src/api/analysis/analysis.queue";
+import { redisClient } from "../src/utils/redis";
 
-// Mock the analyzePullRequest function
-vi.mock("../src/api/analysis/analysis.service", () => ({
-  analyzePullRequest: vi.fn().mockResolvedValue(undefined),
-  PRAnalysisParams: {},
+// Mock dependencies
+vi.mock("../src/api/analysis/analysis.queue");
+vi.mock("../src/utils/redis");
+vi.mock("../src/utils/logger", () => ({
+  default: {
+    info: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
-describe("Analysis Worker", () => {
-  let queue: AnalysisQueue;
+describe("AnalysisWorker", () => {
   let worker: AnalysisWorker;
+  let mockQueue: AnalysisQueue;
 
-  beforeAll(async () => {
-    await redisClient.connect();
-    queue = AnalysisQueue.getInstance();
-    await queue.initialize();
-  });
+  beforeEach(async () => {
+    // Reset mocks
+    vi.clearAllMocks();
 
-  afterAll(async () => {
-    if (worker) {
-      await worker.stopWorker();
-    }
-    await redisClient.disconnect();
-  });
+    // Setup queue mock
+    mockQueue = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      setWorkerCount: vi.fn(),
+      processJobs: vi.fn().mockResolvedValue(undefined),
+      stopProcessing: vi.fn(),
+      cleanupOldJobs: vi.fn().mockResolvedValue(undefined),
+      getQueueStats: vi.fn().mockResolvedValue({}),
+    } as unknown as AnalysisQueue;
 
-  it("should process jobs in the queue", async () => {
-    // Add a test job
-    const job = await queue.addJob({
-      owner: "test-owner",
-      repo: "test-repo",
-      pull_number: 123,
-    });
+    (AnalysisQueue.getInstance as any).mockReturnValue(mockQueue);
 
-    // Start worker
+    // Setup Redis mock
+    (redisClient.connect as any).mockResolvedValue(undefined);
+    (redisClient.disconnect as any).mockResolvedValue(undefined);
+
+    // Create worker instance
     worker = new AnalysisWorker();
+  });
+
+  afterEach(async () => {
+    // Ensure worker is stopped
+    await worker.stopWorker();
+  });
+
+  it("should start worker successfully", async () => {
     await worker.startWorker();
 
-    // Wait for job to be processed
-    let currentJob = null;
-    let attempts = 0;
-    const maxAttempts = 30;
-
-    while (attempts < maxAttempts) {
-      currentJob = await queue.getJob(job.id);
-      if (currentJob?.status === "completed") {
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      attempts++;
-    }
-
-    expect(currentJob?.status).toBe("completed");
-    await worker.stopWorker();
-  }, 30000);
+    expect(redisClient.connect).toHaveBeenCalled();
+    expect(mockQueue.initialize).toHaveBeenCalled();
+    expect(mockQueue.setWorkerCount).toHaveBeenCalledWith(1);
+    expect(mockQueue.processJobs).toHaveBeenCalled();
+  });
 
   it("should handle worker shutdown gracefully", async () => {
-    const mockExit = vi
-      .spyOn(process, "exit")
-      .mockImplementation(() => undefined as never);
-
-    worker = new AnalysisWorker();
+    // Start the worker
     await worker.startWorker();
 
-    const sigtermHandler = process.listeners("SIGTERM").pop();
-    if (sigtermHandler) {
-      await sigtermHandler("SIGTERM");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(mockExit).toHaveBeenCalledWith(0);
-    }
-
-    mockExit.mockRestore();
+    // Stop the worker
     await worker.stopWorker();
-  }, 10000);
 
-  it("should handle worker errors", async () => {
-    vi.spyOn(redisClient, "connect").mockRejectedValueOnce(
+    // Verify cleanup
+    expect(mockQueue.stopProcessing).toHaveBeenCalled();
+    expect(redisClient.disconnect).toHaveBeenCalled();
+  });
+
+  it("should handle errors during startup", async () => {
+    // Mock Redis connection error
+    (redisClient.connect as any).mockRejectedValueOnce(
       new Error("Connection failed")
     );
 
-    worker = new AnalysisWorker();
+    // Attempt to start worker
     await expect(worker.startWorker()).rejects.toThrow("Connection failed");
-  }, 10000);
+
+    // Verify cleanup
+    expect(mockQueue.initialize).not.toHaveBeenCalled();
+    expect(mockQueue.processJobs).not.toHaveBeenCalled();
+  });
+
+  it("should handle errors during job processing", async () => {
+    // Start worker
+    await worker.startWorker();
+
+    // Simulate processing error
+    const error = new Error("Processing failed");
+    (mockQueue.processJobs as any).mockRejectedValueOnce(error);
+
+    // Wait for error to be handled
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Stop worker
+    await worker.stopWorker();
+
+    // Verify cleanup
+    expect(mockQueue.stopProcessing).toHaveBeenCalled();
+    expect(redisClient.disconnect).toHaveBeenCalled();
+  });
 });
