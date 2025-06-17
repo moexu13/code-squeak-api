@@ -1,9 +1,12 @@
 import { redisClient } from "../utils/redis";
 import { AnalysisQueue } from "../api/analysis/analysis.queue";
+import logger from "../utils/logger";
 
 export class AnalysisWorker {
   private isProcessing: boolean = false;
   private queue: AnalysisQueue;
+  private cleanupInterval: NodeJS.Timeout | null = null;
+  private statsInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.queue = AnalysisQueue.getInstance();
@@ -13,46 +16,87 @@ export class AnalysisWorker {
     try {
       // Connect to Redis
       await redisClient.connect();
-      console.log("Connected to Redis");
+      logger.info({ message: "Connected to Redis" });
 
       // Initialize queue
       await this.queue.initialize();
-      console.log("Analysis queue initialized");
+      logger.info({ message: "Analysis queue initialized" });
+
+      // Set worker count (can be configured via environment variable)
+      const workerCount = parseInt(process.env.WORKER_COUNT || "1", 10);
+      this.queue.setWorkerCount(workerCount);
+      logger.info({ message: `Worker count set to ${workerCount}` });
 
       // Start processing jobs
       this.isProcessing = true;
-      console.log("Worker started");
+      logger.info({ message: "Worker started" });
 
       // Start job processing in the background
       process.nextTick(async () => {
         try {
           await this.queue.processJobs();
         } catch (error) {
-          console.error(
-            "Error in job processing:",
-            error instanceof Error ? error.message : "Unknown error"
-          );
+          logger.error({
+            message: "Error in job processing",
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
           this.isProcessing = false;
         }
       });
 
+      // Start cleanup interval (default: every 6 hours)
+      const cleanupInterval = parseInt(
+        process.env.CLEANUP_INTERVAL || "21600000",
+        10
+      );
+      this.cleanupInterval = setInterval(async () => {
+        try {
+          await this.queue.cleanupOldJobs();
+        } catch (error) {
+          logger.error({
+            message: "Error in cleanup job",
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      }, cleanupInterval);
+
+      // Start stats logging interval (default: every 5 minutes)
+      const statsInterval = parseInt(
+        process.env.STATS_INTERVAL || "300000",
+        10
+      );
+      this.statsInterval = setInterval(async () => {
+        try {
+          const stats = await this.queue.getQueueStats();
+          logger.info({
+            message: "Queue stats",
+            stats,
+          });
+        } catch (error) {
+          logger.error({
+            message: "Error getting queue stats",
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      }, statsInterval);
+
       // Handle graceful shutdown
       process.on("SIGTERM", async () => {
-        console.log("Received SIGTERM signal");
+        logger.info({ message: "Received SIGTERM signal" });
         await this.stopWorker();
         setTimeout(() => process.exit(0), 0);
       });
 
       process.on("SIGINT", async () => {
-        console.log("Received SIGINT signal");
+        logger.info({ message: "Received SIGINT signal" });
         await this.stopWorker();
         setTimeout(() => process.exit(0), 0);
       });
     } catch (error) {
-      console.error(
-        "Error starting worker:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
+      logger.error({
+        message: "Error starting worker",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
       this.isProcessing = false;
       throw error;
     }
@@ -61,17 +105,31 @@ export class AnalysisWorker {
   public async stopWorker(): Promise<void> {
     if (!this.isProcessing) return;
 
-    console.log("Stopping worker...");
+    logger.info({ message: "Stopping worker..." });
     this.isProcessing = false;
 
     try {
+      // Stop the queue processing
+      this.queue.stopProcessing();
+
+      // Clear intervals
+      if (this.cleanupInterval) {
+        clearInterval(this.cleanupInterval);
+        this.cleanupInterval = null;
+      }
+      if (this.statsInterval) {
+        clearInterval(this.statsInterval);
+        this.statsInterval = null;
+      }
+
+      // Disconnect from Redis
       await redisClient.disconnect();
-      console.log("Worker stopped");
+      logger.info({ message: "Worker stopped" });
     } catch (error) {
-      console.error(
-        "Error stopping worker:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
+      logger.error({
+        message: "Error stopping worker",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
       throw error;
     }
   }
@@ -81,7 +139,10 @@ export class AnalysisWorker {
 if (require.main === module) {
   const worker = new AnalysisWorker();
   worker.startWorker().catch((error) => {
-    console.error("Worker failed to start:", error);
+    logger.error({
+      message: "Worker failed to start",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
     process.exit(1);
   });
 }
