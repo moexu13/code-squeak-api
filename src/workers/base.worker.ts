@@ -10,6 +10,10 @@ export abstract class BaseWorker {
   protected config: WorkerConfig;
   protected stats: WorkerStats;
 
+  /**
+   * Creates a new worker instance with the specified configuration.
+   * @param config - Optional configuration to override default settings
+   */
   constructor(config: Partial<WorkerConfig> = {}) {
     this.config = {
       workerCount: parseInt(process.env.WORKER_COUNT || "1", 10),
@@ -38,6 +42,17 @@ export abstract class BaseWorker {
   protected abstract cleanup(): Promise<void>;
   protected abstract getStats(): Promise<WorkerStats>;
 
+  /**
+   * Starts the worker process.
+   * This will:
+   * 1. Connect to Redis
+   * 2. Initialize the worker
+   * 3. Start processing jobs
+   * 4. Set up cleanup and stats intervals
+   * 5. Register shutdown handlers
+   *
+   * @throws {Error} If there's an error during startup
+   */
   public async start(): Promise<void> {
     try {
       await redisClient.connect();
@@ -95,6 +110,16 @@ export abstract class BaseWorker {
     }
   }
 
+  /**
+   * Stops the worker process gracefully.
+   * This will:
+   * 1. Stop processing new jobs
+   * 2. Clear all intervals
+   * 3. Wait for current processing to complete
+   * 4. Disconnect from Redis
+   *
+   * @throws {Error} If there's an error during shutdown
+   */
   public async stop(): Promise<void> {
     if (!this.isProcessing) return;
 
