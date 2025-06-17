@@ -1,14 +1,10 @@
 import { Request, Response } from "express";
 import asyncErrorBoundary from "../../errors/asyncErrorBoundary";
-import {
-  analyze,
-  analyzePullRequest,
-  AnalysisParams,
-  PRAnalysisParams,
-} from "./analysis.service";
+import { analyze, AnalysisParams, PRAnalysisParams } from "./analysis.service";
 import { BadRequestError } from "../../errors/http";
 import logger from "../../utils/logger";
 import { validateAndSanitizeParams } from "../../utils/validation";
+import { AnalysisQueue } from "./analysis.queue";
 
 async function create(req: Request, res: Response) {
   const {
@@ -68,12 +64,19 @@ async function analyzePR(req: Request, res: Response) {
   };
 
   logger.info({
-    message: "Processing PR analysis request",
+    message: "Queueing PR analysis request",
     params: validateAndSanitizeParams(params),
   });
 
-  await analyzePullRequest(params);
-  res.json({ data: "Pull request analysis completed" });
+  const queue = AnalysisQueue.getInstance();
+  await queue.initialize();
+  const jobId = await queue.addJob(params);
+
+  res.json({
+    data: "Pull request analysis queued",
+    jobId,
+    status: "pending",
+  });
 }
 
 export default {

@@ -8,7 +8,8 @@
     "build": "vite build",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "list-models": "ts-node src/scripts/list-models.ts"
+    "list-models": "ts-node src/scripts/list-models.ts",
+    "worker": "ts-node src/workers/analysis.worker.ts"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
