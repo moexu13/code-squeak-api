@@ -1,42 +1,28 @@
 import { redisClient } from "../../utils/redis";
 import logger from "../../utils/logger";
 import { analyzePullRequest } from "./analysis.service";
-
-export interface AnalysisJob {
-  id: string;
-  status: "pending" | "processing" | "completed" | "failed";
-  params: {
-    owner: string;
-    repo: string;
-    pull_number: number;
-  };
-  result?: any;
-  error?: string;
-  created_at: number;
-  updated_at: number;
-}
-
-export interface QueueStats {
-  pending: number;
-  processing: number;
-  completed: number;
-  failed: number;
-  total: number;
-}
+import {
+  AnalysisJob,
+  QueueStats,
+  QueueConfig,
+  DEFAULT_QUEUE_CONFIG,
+  PRAnalysisParams,
+  JobResult,
+} from "./types/queue";
 
 export class AnalysisQueue {
   private static instance: AnalysisQueue;
-  private readonly queueKey = "analysis:queue";
-  private readonly jobsKey = "analysis:jobs";
+  private readonly config: QueueConfig;
   private isProcessing: boolean = false;
-  private workerCount: number = 1;
   private workers: Set<Promise<void>> = new Set();
 
-  private constructor() {}
+  private constructor(config: Partial<QueueConfig> = {}) {
+    this.config = { ...DEFAULT_QUEUE_CONFIG, ...config };
+  }
 
-  public static getInstance(): AnalysisQueue {
+  public static getInstance(config?: Partial<QueueConfig>): AnalysisQueue {
     if (!AnalysisQueue.instance) {
-      AnalysisQueue.instance = new AnalysisQueue();
+      AnalysisQueue.instance = new AnalysisQueue(config);
     }
     return AnalysisQueue.instance;
   }
@@ -51,7 +37,7 @@ export class AnalysisQueue {
     }
   }
 
-  public async addJob(params: AnalysisJob["params"]): Promise<AnalysisJob> {
+  public async addJob(params: PRAnalysisParams): Promise<AnalysisJob> {
     const job: AnalysisJob = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       status: "pending",
@@ -63,10 +49,10 @@ export class AnalysisQueue {
     try {
       const client = redisClient.getClient();
       // Store job details
-      await client.set(`${this.jobsKey}:${job.id}`, JSON.stringify(job));
+      await client.set(`${this.config.jobsKey}:${job.id}`, JSON.stringify(job));
 
       // Add job ID to queue
-      await client.lPush(this.queueKey, job.id);
+      await client.lPush(this.config.queueKey, job.id);
 
       logger.info({
         message: "Added PR analysis job to queue",
@@ -83,7 +69,7 @@ export class AnalysisQueue {
   public async getJob(jobId: string): Promise<AnalysisJob | null> {
     try {
       const client = redisClient.getClient();
-      const jobData = await client.get(`${this.jobsKey}:${jobId}`);
+      const jobData = await client.get(`${this.config.jobsKey}:${jobId}`);
       return jobData ? JSON.parse(jobData) : null;
     } catch (error) {
       logger.error({ message: "Failed to get job", error });
@@ -94,7 +80,7 @@ export class AnalysisQueue {
   public async updateJobStatus(
     jobId: string,
     status: AnalysisJob["status"],
-    result?: any,
+    result?: JobResult,
     error?: string
   ): Promise<void> {
     try {
@@ -112,7 +98,10 @@ export class AnalysisQueue {
       };
 
       const client = redisClient.getClient();
-      await client.set(`${this.jobsKey}:${jobId}`, JSON.stringify(updatedJob));
+      await client.set(
+        `${this.config.jobsKey}:${jobId}`,
+        JSON.stringify(updatedJob)
+      );
       logger.info({ message: `Updated job ${jobId} status to ${status}` });
     } catch (error) {
       logger.error({ message: "Failed to update job status", error });
@@ -129,7 +118,7 @@ export class AnalysisQueue {
     logger.info({ message: "Starting job processing" });
 
     // Start multiple workers based on workerCount
-    for (let i = 0; i < this.workerCount; i++) {
+    for (let i = 0; i < this.config.workerCount; i++) {
       const worker = this.startWorker();
       this.workers.add(worker);
       worker.finally(() => this.workers.delete(worker));
@@ -144,11 +133,13 @@ export class AnalysisQueue {
       const client = redisClient.getClient();
       while (this.isProcessing) {
         // Get next job from queue
-        const jobId = await client.rPop(this.queueKey);
+        const jobId = await client.rPop(this.config.queueKey);
 
         if (!jobId) {
           // No jobs in queue, wait a bit
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await new Promise((resolve) =>
+            setTimeout(resolve, this.config.pollInterval)
+          );
           continue;
         }
 
@@ -179,7 +170,10 @@ export class AnalysisQueue {
           await this.updateJobStatus(
             jobId,
             "failed",
-            undefined,
+            {
+              success: false,
+              error: error instanceof Error ? error.message : "Unknown error",
+            },
             error instanceof Error ? error.message : "Unknown error"
           );
         }
@@ -198,15 +192,16 @@ export class AnalysisQueue {
     try {
       await analyzePullRequest(job.params);
       logger.info({
-        message: `Processed job ${job.id}`,
-        owner: job.params.owner,
-        repo: job.params.repo,
-        pull_number: job.params.pull_number,
+        message: "Job processed successfully",
+        jobId: job.id,
       });
     } catch (error) {
       logger.error({
-        message: `Error processing job ${job.id}`,
+        message: "Failed to analyze pull request",
         error: error instanceof Error ? error.message : "Unknown error",
+        owner: job.params.owner,
+        repo: job.params.repo,
+        pull_number: job.params.pull_number,
       });
       throw error;
     }
@@ -217,17 +212,13 @@ export class AnalysisQueue {
   }
 
   public setWorkerCount(count: number): void {
-    if (count < 1) {
-      throw new Error("Worker count must be at least 1");
-    }
-    this.workerCount = count;
-    logger.info({ message: `Worker count set to ${count}` });
+    this.config.workerCount = count;
   }
 
   public async getQueueStats(): Promise<QueueStats> {
     try {
       const client = redisClient.getClient();
-      const jobs = await client.keys(`${this.jobsKey}:*`);
+      const jobs = await client.keys(`${this.config.jobsKey}:*`);
       const stats: QueueStats = {
         pending: 0,
         processing: 0,
@@ -237,47 +228,40 @@ export class AnalysisQueue {
       };
 
       for (const jobKey of jobs) {
-        const job = await this.getJob(jobKey.split(":")[2]);
-        if (job) {
+        const jobData = await client.get(jobKey);
+        if (jobData) {
+          const job: AnalysisJob = JSON.parse(jobData);
           stats[job.status]++;
         }
       }
 
       return stats;
     } catch (error) {
-      logger.error({
-        message: "Failed to get queue stats",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
+      logger.error({ message: "Failed to get queue stats", error });
       throw error;
     }
   }
 
   public async cleanupOldJobs(
-    maxAge: number = 24 * 60 * 60 * 1000
+    maxAge: number = this.config.maxJobAge
   ): Promise<void> {
     try {
       const client = redisClient.getClient();
-      const jobs = await client.keys(`${this.jobsKey}:*`);
-      let cleanedCount = 0;
+      const jobs = await client.keys(`${this.config.jobsKey}:*`);
+      const now = Date.now();
 
       for (const jobKey of jobs) {
-        const job = await this.getJob(jobKey.split(":")[2]);
-        if (job && Date.now() - job.updated_at > maxAge) {
-          await client.del(jobKey);
-          cleanedCount++;
+        const jobData = await client.get(jobKey);
+        if (jobData) {
+          const job: AnalysisJob = JSON.parse(jobData);
+          if (now - job.updated_at > maxAge) {
+            await client.del(jobKey);
+            logger.info({ message: `Cleaned up old job ${job.id}` });
+          }
         }
       }
-
-      logger.info({
-        message: `Cleaned up ${cleanedCount} old jobs`,
-        maxAge,
-      });
     } catch (error) {
-      logger.error({
-        message: "Failed to clean up old jobs",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
+      logger.error({ message: "Failed to cleanup old jobs", error });
       throw error;
     }
   }

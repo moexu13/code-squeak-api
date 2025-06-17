@@ -144,11 +144,10 @@ describe("Analysis Controller", () => {
           pull_number: 123,
         });
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(202);
       expect(response.body).toBeDefined();
-      expect(response.body.data).toBe("Pull request analysis queued");
+      expect(response.body.message).toBe("PR analysis job added to queue");
       expect(response.body.jobId).toBeDefined();
-      expect(response.body.status).toBe("pending");
     });
 
     it("should return 400 if required PR parameters are missing", async () => {
@@ -187,11 +186,10 @@ describe("Analysis Controller", () => {
           temperature: 0.7,
         });
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(202);
       expect(response.body).toBeDefined();
-      expect(response.body.data).toBe("Pull request analysis queued");
+      expect(response.body.message).toBe("PR analysis job added to queue");
       expect(response.body.jobId).toBeDefined();
-      expect(response.body.status).toBe("pending");
     });
   });
 });

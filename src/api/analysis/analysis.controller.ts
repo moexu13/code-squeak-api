@@ -1,11 +1,12 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import asyncErrorBoundary from "../../errors/asyncErrorBoundary";
-import { analyze, AnalysisParams, PRAnalysisParams } from "./analysis.service";
+import { analyze, AnalysisParams } from "./analysis.service";
 import { BadRequestError, NotFoundError } from "../../errors/http";
 import logger from "../../utils/logger";
 import { validateAndSanitizeParams } from "../../utils/validation";
 import { AnalysisQueue } from "./analysis.queue";
 import { getPullRequest } from "../../utils/github";
+import { DEFAULT_QUEUE_CONFIG, PRAnalysisParams } from "./types/queue";
 
 async function create(req: Request, res: Response) {
   const {
@@ -48,43 +49,50 @@ async function create(req: Request, res: Response) {
   res.json({ data: result });
 }
 
-async function analyzePR(req: Request, res: Response) {
-  const { owner, repo, pull_number, model, max_tokens, temperature } = req.body;
-
-  if (!owner || !repo || !pull_number) {
-    throw new BadRequestError("Owner, repo, and pull_number are required");
-  }
-
-  // Check if PR exists
+export async function analyzePR(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
-    await getPullRequest(owner, repo, pull_number);
+    const { owner, repo, pull_number } = req.body;
+
+    if (!owner || !repo || !pull_number) {
+      throw new BadRequestError(
+        "Missing required parameters: owner, repo, pull_number"
+      );
+    }
+
+    // Check if PR exists
+    try {
+      await getPullRequest(owner, repo, pull_number);
+    } catch (error) {
+      throw new NotFoundError(`Pull request #${pull_number} not found`);
+    }
+
+    const params: PRAnalysisParams = {
+      owner,
+      repo,
+      pull_number,
+      model: req.body.model,
+      max_tokens: req.body.max_tokens,
+      temperature: req.body.temperature,
+    };
+
+    const queue = AnalysisQueue.getInstance({
+      ...DEFAULT_QUEUE_CONFIG,
+      workerCount: parseInt(process.env.WORKER_COUNT || "1", 10),
+    });
+
+    const job = await queue.addJob(params);
+
+    res.status(202).json({
+      message: "PR analysis job added to queue",
+      jobId: job.id,
+    });
   } catch (error) {
-    throw new NotFoundError("Pull request not found");
+    next(error);
   }
-
-  const params: PRAnalysisParams = {
-    owner,
-    repo,
-    pull_number,
-    model,
-    max_tokens,
-    temperature,
-  };
-
-  logger.info({
-    message: "Queueing PR analysis request",
-    params: validateAndSanitizeParams(params),
-  });
-
-  const queue = AnalysisQueue.getInstance();
-  await queue.initialize();
-  const job = await queue.addJob(params);
-
-  res.json({
-    data: "Pull request analysis queued",
-    jobId: job.id,
-    status: "pending",
-  });
 }
 
 export default {

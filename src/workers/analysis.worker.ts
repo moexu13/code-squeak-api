@@ -1,6 +1,7 @@
 import { redisClient } from "../utils/redis";
 import { AnalysisQueue } from "../api/analysis/analysis.queue";
 import logger from "../utils/logger";
+import { DEFAULT_QUEUE_CONFIG } from "../api/analysis/types/queue";
 
 export class AnalysisWorker {
   private isProcessing: boolean = false;
@@ -10,7 +11,13 @@ export class AnalysisWorker {
   private processingPromise: Promise<void> | null = null;
 
   constructor() {
-    this.queue = AnalysisQueue.getInstance();
+    this.queue = AnalysisQueue.getInstance({
+      ...DEFAULT_QUEUE_CONFIG,
+      workerCount: parseInt(process.env.WORKER_COUNT || "1", 10),
+      pollInterval: parseInt(process.env.POLL_INTERVAL || "100", 10),
+      cleanupInterval: parseInt(process.env.CLEANUP_INTERVAL || "21600000", 10),
+      maxJobAge: parseInt(process.env.MAX_JOB_AGE || "604800000", 10),
+    });
   }
 
   public async startWorker(): Promise<void> {
@@ -22,11 +29,6 @@ export class AnalysisWorker {
       // Initialize queue
       await this.queue.initialize();
       logger.info({ message: "Analysis queue initialized" });
-
-      // Set worker count (can be configured via environment variable)
-      const workerCount = parseInt(process.env.WORKER_COUNT || "1", 10);
-      this.queue.setWorkerCount(workerCount);
-      logger.info({ message: `Worker count set to ${workerCount}` });
 
       // Start processing jobs
       this.isProcessing = true;

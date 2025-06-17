@@ -6,11 +6,12 @@ import { getModelSettings } from "./models/config";
 import { ModelFactory } from "./models/factory";
 import { getDiff, create as createComment } from "../github/github.service";
 import { StatusError } from "../../errors/status";
+import { PRAnalysisParams } from "./types/queue";
 
 const CACHE_PREFIX = "analysis:diff";
 const PR_ANALYSIS_CACHE_PREFIX = "analysis:pr";
 const DIFF_CACHE_PREFIX = "diff:pr";
-const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "claude-3-5-haiku-latest";
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "claude-3-5-haiku-20241022";
 
 export interface AnalysisParams {
   diff: string;
@@ -23,15 +24,6 @@ export interface AnalysisParams {
   author?: string;
   state?: string;
   url?: string;
-}
-
-export interface PRAnalysisParams {
-  owner: string;
-  repo: string;
-  pull_number: number;
-  model?: string;
-  max_tokens?: number;
-  temperature?: number;
 }
 
 export type AnalysisResult = ModelResponse;

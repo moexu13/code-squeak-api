@@ -51,7 +51,6 @@ describe("AnalysisWorker", () => {
 
     expect(redisClient.connect).toHaveBeenCalled();
     expect(mockQueue.initialize).toHaveBeenCalled();
-    expect(mockQueue.setWorkerCount).toHaveBeenCalledWith(1);
     expect(mockQueue.processJobs).toHaveBeenCalled();
   });
 

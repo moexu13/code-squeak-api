@@ -9,7 +9,7 @@ import {
 } from "vitest";
 import { redisClient } from "../src/utils/redis";
 import { AnalysisQueue } from "../src/api/analysis/analysis.queue";
-import { PRAnalysisParams } from "../src/api/analysis/analysis.service";
+import { PRAnalysisParams } from "../src/api/analysis/types/queue";
 
 // Mock the module before any imports that use it
 vi.mock("../src/api/analysis/analysis.service", () => ({
