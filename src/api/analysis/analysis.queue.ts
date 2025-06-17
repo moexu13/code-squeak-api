@@ -1,23 +1,26 @@
 import { redisClient } from "../../utils/redis";
 import logger from "../../utils/logger";
-import { PRAnalysisParams, analyzePullRequest } from "./analysis.service";
+import { analyzePullRequest } from "./analysis.service";
 
-const STREAM_KEY = "pr-analysis:stream";
-const CONSUMER_GROUP = "pr-analysis-group";
-const CONSUMER_NAME = "pr-analysis-consumer";
-
-interface QueueJob {
+export interface AnalysisJob {
   id: string;
-  data: PRAnalysisParams;
   status: "pending" | "processing" | "completed" | "failed";
-  attempts: number;
-  createdAt: number;
-  updatedAt: number;
+  params: {
+    owner: string;
+    repo: string;
+    pull_number: number;
+  };
+  result?: any;
+  error?: string;
+  created_at: number;
+  updated_at: number;
 }
 
 export class AnalysisQueue {
   private static instance: AnalysisQueue;
-  private isInitialized: boolean = false;
+  private readonly queueKey = "analysis:queue";
+  private readonly jobsKey = "analysis:jobs";
+  private isProcessing: boolean = false;
 
   private constructor() {}
 
@@ -29,141 +32,153 @@ export class AnalysisQueue {
   }
 
   public async initialize(): Promise<void> {
-    if (this.isInitialized) return;
-
-    const client = redisClient.getClient();
     try {
-      // Create consumer group if it doesn't exist
-      await client.xGroupCreate(STREAM_KEY, CONSUMER_GROUP, "0", {
-        MKSTREAM: true,
-      });
+      await redisClient.connect();
+      logger.info({ message: "Redis Client Connected" });
     } catch (error) {
-      // Group might already exist, which is fine
-      if (!(error instanceof Error) || !error.message.includes("BUSYGROUP")) {
-        throw error;
-      }
+      logger.error({ message: "Failed to connect to Redis", error });
+      throw error;
     }
-    this.isInitialized = true;
   }
 
-  public async addJob(params: PRAnalysisParams): Promise<string> {
-    const client = redisClient.getClient();
-    const job: QueueJob = {
-      id: `${params.owner}/${params.repo}/${params.pull_number}`,
-      data: params,
+  public async addJob(params: AnalysisJob["params"]): Promise<AnalysisJob> {
+    const job: AnalysisJob = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       status: "pending",
-      attempts: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      params,
+      created_at: Date.now(),
+      updated_at: Date.now(),
     };
 
-    const id = await client.xAdd(STREAM_KEY, "*", {
-      job: JSON.stringify(job),
-    });
+    try {
+      const client = redisClient.getClient();
+      // Store job details
+      await client.set(`${this.jobsKey}:${job.id}`, JSON.stringify(job));
 
-    logger.info({
-      message: "Added PR analysis job to queue",
-      jobId: id,
-      params: {
-        owner: params.owner,
-        repo: params.repo,
-        pull_number: params.pull_number,
-      },
-    });
+      // Add job ID to queue
+      await client.lPush(this.queueKey, job.id);
 
-    return id;
+      logger.info({
+        message: "Added PR analysis job to queue",
+        jobId: job.id,
+        params,
+      });
+      return job;
+    } catch (error) {
+      logger.error({ message: "Failed to add job to queue", error });
+      throw error;
+    }
+  }
+
+  public async getJob(jobId: string): Promise<AnalysisJob | null> {
+    try {
+      const client = redisClient.getClient();
+      const jobData = await client.get(`${this.jobsKey}:${jobId}`);
+      return jobData ? JSON.parse(jobData) : null;
+    } catch (error) {
+      logger.error({ message: "Failed to get job", error });
+      return null;
+    }
+  }
+
+  public async updateJobStatus(
+    jobId: string,
+    status: AnalysisJob["status"],
+    result?: any,
+    error?: string
+  ): Promise<void> {
+    try {
+      const job = await this.getJob(jobId);
+      if (!job) {
+        throw new Error(`Job ${jobId} not found`);
+      }
+
+      const updatedJob: AnalysisJob = {
+        ...job,
+        status,
+        result,
+        error,
+        updated_at: Date.now(),
+      };
+
+      const client = redisClient.getClient();
+      await client.set(`${this.jobsKey}:${jobId}`, JSON.stringify(updatedJob));
+      logger.info({ message: `Updated job ${jobId} status to ${status}` });
+    } catch (error) {
+      logger.error({ message: "Failed to update job status", error });
+      throw error;
+    }
   }
 
   public async processJobs(): Promise<void> {
-    const client = redisClient.getClient();
+    if (this.isProcessing) {
+      return;
+    }
 
-    while (true) {
-      try {
-        // Read pending jobs
-        const response = await client.xReadGroup(
-          CONSUMER_GROUP,
-          CONSUMER_NAME,
-          {
-            key: STREAM_KEY,
-            id: ">",
-          },
-          {
-            COUNT: 1,
-            BLOCK: 2000,
-          }
-        );
+    this.isProcessing = true;
+    console.log("Starting job processing");
 
-        if (!response || !Array.isArray(response) || response.length === 0)
+    try {
+      const client = redisClient.getClient();
+      while (this.isProcessing) {
+        // Get next job from queue
+        const jobId = await client.rPop(this.queueKey);
+
+        if (!jobId) {
+          // No jobs in queue, wait a bit
+          await new Promise((resolve) => setTimeout(resolve, 100));
           continue;
-
-        const [[stream, messages]] = response;
-        for (const [id, fields] of messages) {
-          const job: QueueJob = JSON.parse(fields.job);
-
-          try {
-            // Update job status
-            await this.updateJobStatus(id, "processing");
-
-            // Process the job
-            await analyzePullRequest(job.data);
-
-            // Mark as completed
-            await this.updateJobStatus(id, "completed");
-
-            // Acknowledge the message
-            await client.xAck(STREAM_KEY, CONSUMER_GROUP, id);
-          } catch (error) {
-            // Handle failure
-            job.attempts++;
-            if (job.attempts >= 3) {
-              await this.updateJobStatus(id, "failed");
-            } else {
-              // Requeue the job
-              await this.updateJobStatus(id, "pending");
-              await client.xAck(STREAM_KEY, CONSUMER_GROUP, id);
-              await this.addJob(job.data);
-            }
-
-            logger.error({
-              message: "Failed to process PR analysis job",
-              error: error instanceof Error ? error.message : "Unknown error",
-              jobId: id,
-              attempts: job.attempts,
-            });
-          }
         }
-      } catch (error) {
-        logger.error({
-          message: "Error processing jobs",
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-        // Wait before retrying
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        console.log(`Processing job ${jobId}`);
+
+        try {
+          // Get job details
+          const job = await this.getJob(jobId);
+          if (!job) {
+            console.log(`Job ${jobId} not found`);
+            continue;
+          }
+
+          // Update status to processing
+          await this.updateJobStatus(jobId, "processing");
+
+          // Process the job
+          await this.processJob(job);
+
+          // Update status to completed
+          await this.updateJobStatus(jobId, "completed", { success: true });
+          console.log(`Completed job ${jobId}`);
+        } catch (error) {
+          console.error(`Error processing job ${jobId}:`, error);
+          await this.updateJobStatus(
+            jobId,
+            "failed",
+            undefined,
+            error instanceof Error ? error.message : "Unknown error"
+          );
+        }
       }
+    } catch (error) {
+      console.error("Error in job processing loop:", error);
+      this.isProcessing = false;
+      throw error;
     }
   }
 
-  private async updateJobStatus(
-    id: string,
-    status: QueueJob["status"]
-  ): Promise<void> {
-    const client = redisClient.getClient();
-    const job = await this.getJob(id);
-    if (!job) return;
-
-    job.status = status;
-    job.updatedAt = Date.now();
-
-    await client.xAdd(STREAM_KEY, id, {
-      job: JSON.stringify(job),
-    });
+  private async processJob(job: AnalysisJob): Promise<void> {
+    try {
+      await analyzePullRequest(job.params);
+      console.log(
+        `Processed job ${job.id} for ${job.params.owner}/${job.params.repo}#${job.params.pull_number}`
+      );
+    } catch (error) {
+      console.error(`Error processing job ${job.id}:`, error);
+      throw error;
+    }
   }
 
-  public async getJob(id: string): Promise<QueueJob | null> {
-    const client = redisClient.getClient();
-    const response = await client.xRange(STREAM_KEY, id, id);
-    if (!Array.isArray(response) || response.length === 0) return null;
-
-    return JSON.parse(response[0].message.job);
+  public stopProcessing(): void {
+    this.isProcessing = false;
   }
 }

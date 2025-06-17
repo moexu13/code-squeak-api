@@ -1,47 +1,87 @@
 import { redisClient } from "../utils/redis";
 import { AnalysisQueue } from "../api/analysis/analysis.queue";
-import logger from "../utils/logger";
 
-async function startWorker() {
-  try {
-    // Connect to Redis
-    await redisClient.connect();
-    logger.info({ message: "Connected to Redis" });
+export class AnalysisWorker {
+  private isProcessing: boolean = false;
+  private queue: AnalysisQueue;
 
-    // Initialize and start the queue processor
-    const queue = AnalysisQueue.getInstance();
-    await queue.initialize();
-    logger.info({ message: "Analysis queue initialized" });
+  constructor() {
+    this.queue = AnalysisQueue.getInstance();
+  }
 
-    // Start processing jobs
-    await queue.processJobs();
-  } catch (error) {
-    logger.error({
-      message: "Worker failed to start",
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-    process.exit(1);
+  public async startWorker(): Promise<void> {
+    try {
+      // Connect to Redis
+      await redisClient.connect();
+      console.log("Connected to Redis");
+
+      // Initialize queue
+      await this.queue.initialize();
+      console.log("Analysis queue initialized");
+
+      // Start processing jobs
+      this.isProcessing = true;
+      console.log("Worker started");
+
+      // Start job processing in the background
+      process.nextTick(async () => {
+        try {
+          await this.queue.processJobs();
+        } catch (error) {
+          console.error(
+            "Error in job processing:",
+            error instanceof Error ? error.message : "Unknown error"
+          );
+          this.isProcessing = false;
+        }
+      });
+
+      // Handle graceful shutdown
+      process.on("SIGTERM", async () => {
+        console.log("Received SIGTERM signal");
+        await this.stopWorker();
+        setTimeout(() => process.exit(0), 0);
+      });
+
+      process.on("SIGINT", async () => {
+        console.log("Received SIGINT signal");
+        await this.stopWorker();
+        setTimeout(() => process.exit(0), 0);
+      });
+    } catch (error) {
+      console.error(
+        "Error starting worker:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      this.isProcessing = false;
+      throw error;
+    }
+  }
+
+  public async stopWorker(): Promise<void> {
+    if (!this.isProcessing) return;
+
+    console.log("Stopping worker...");
+    this.isProcessing = false;
+
+    try {
+      await redisClient.disconnect();
+      console.log("Worker stopped");
+    } catch (error) {
+      console.error(
+        "Error stopping worker:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      throw error;
+    }
   }
 }
 
-// Handle graceful shutdown
-process.on("SIGTERM", async () => {
-  logger.info({ message: "Received SIGTERM signal, shutting down gracefully" });
-  await redisClient.disconnect();
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  logger.info({ message: "Received SIGINT signal, shutting down gracefully" });
-  await redisClient.disconnect();
-  process.exit(0);
-});
-
-// Start the worker
-startWorker().catch((error) => {
-  logger.error({
-    message: "Worker failed to start",
-    error: error instanceof Error ? error.message : "Unknown error",
+// Start the worker if this file is run directly
+if (require.main === module) {
+  const worker = new AnalysisWorker();
+  worker.startWorker().catch((error) => {
+    console.error("Worker failed to start:", error);
+    process.exit(1);
   });
-  process.exit(1);
-});
+}

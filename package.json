@@ -28,6 +28,7 @@
     "@octokit/rest": "^21.1.1",
     "@sentry/node": "^9.29.0",
     "@unkey/api": "^0.36.0",
+    "code-squeak-api": "link:",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "http-errors": "^2.0.0",

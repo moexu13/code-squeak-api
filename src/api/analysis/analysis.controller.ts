@@ -1,10 +1,11 @@
 import { Request, Response } from "express";
 import asyncErrorBoundary from "../../errors/asyncErrorBoundary";
 import { analyze, AnalysisParams, PRAnalysisParams } from "./analysis.service";
-import { BadRequestError } from "../../errors/http";
+import { BadRequestError, NotFoundError } from "../../errors/http";
 import logger from "../../utils/logger";
 import { validateAndSanitizeParams } from "../../utils/validation";
 import { AnalysisQueue } from "./analysis.queue";
+import { getPullRequest } from "../../utils/github";
 
 async function create(req: Request, res: Response) {
   const {
@@ -54,6 +55,13 @@ async function analyzePR(req: Request, res: Response) {
     throw new BadRequestError("Owner, repo, and pull_number are required");
   }
 
+  // Check if PR exists
+  try {
+    await getPullRequest(owner, repo, pull_number);
+  } catch (error) {
+    throw new NotFoundError("Pull request not found");
+  }
+
   const params: PRAnalysisParams = {
     owner,
     repo,
@@ -70,11 +78,11 @@ async function analyzePR(req: Request, res: Response) {
 
   const queue = AnalysisQueue.getInstance();
   await queue.initialize();
-  const jobId = await queue.addJob(params);
+  const job = await queue.addJob(params);
 
   res.json({
     data: "Pull request analysis queued",
-    jobId,
+    jobId: job.id,
     status: "pending",
   });
 }
