@@ -13,6 +13,28 @@ const PR_ANALYSIS_CACHE_PREFIX = "analysis:pr";
 const DIFF_CACHE_PREFIX = "diff:pr";
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "claude-3-5-haiku-20241022";
 
+// Custom error classes for retryable errors
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NetworkError";
+  }
+}
+
+export class TimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TimeoutError";
+  }
+}
+
+export class RateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RateLimitError";
+  }
+}
+
 export interface AnalysisParams {
   diff: string;
   prompt?: string;
@@ -87,6 +109,29 @@ export async function analyze({
       error: error instanceof Error ? error.message : "Unknown error",
       diff_length: diff.length,
     });
+
+    // Convert certain errors to retryable errors
+    if (error instanceof Error) {
+      if (
+        error.message.includes("network") ||
+        error.message.includes("connection")
+      ) {
+        throw new NetworkError(error.message);
+      }
+      if (
+        error.message.includes("timeout") ||
+        error.message.includes("timed out")
+      ) {
+        throw new TimeoutError(error.message);
+      }
+      if (
+        error.message.includes("rate limit") ||
+        error.message.includes("too many requests")
+      ) {
+        throw new RateLimitError(error.message);
+      }
+    }
+
     throw error;
   }
 }
@@ -144,15 +189,39 @@ export async function analyzePullRequest({
     let diff = await getCached<string>(diffCacheKey);
     if (!diff) {
       // If not in cache, fetch from GitHub
-      diff = await getDiff(owner, repo, pull_number);
-      // Cache the diff
-      await setCached(diffCacheKey, diff);
-      logger.info({
-        message: "Cached PR diff",
-        owner,
-        repo,
-        pull_number,
-      });
+      try {
+        diff = await getDiff(owner, repo, pull_number);
+        // Cache the diff
+        await setCached(diffCacheKey, diff);
+        logger.info({
+          message: "Cached PR diff",
+          owner,
+          repo,
+          pull_number,
+        });
+      } catch (error) {
+        if (error instanceof Error) {
+          if (
+            error.message.includes("network") ||
+            error.message.includes("connection")
+          ) {
+            throw new NetworkError(error.message);
+          }
+          if (
+            error.message.includes("timeout") ||
+            error.message.includes("timed out")
+          ) {
+            throw new TimeoutError(error.message);
+          }
+          if (
+            error.message.includes("rate limit") ||
+            error.message.includes("too many requests")
+          ) {
+            throw new RateLimitError(error.message);
+          }
+        }
+        throw error;
+      }
     } else {
       logger.info({
         message: "Cache hit for PR diff",
@@ -186,7 +255,31 @@ export async function analyzePullRequest({
       repo,
       pull_number,
     });
-    await createComment(owner, repo, pull_number, analysis.completion);
+    try {
+      await createComment(owner, repo, pull_number, analysis.completion);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error.message.includes("network") ||
+          error.message.includes("connection")
+        ) {
+          throw new NetworkError(error.message);
+        }
+        if (
+          error.message.includes("timeout") ||
+          error.message.includes("timed out")
+        ) {
+          throw new TimeoutError(error.message);
+        }
+        if (
+          error.message.includes("rate limit") ||
+          error.message.includes("too many requests")
+        ) {
+          throw new RateLimitError(error.message);
+        }
+      }
+      throw error;
+    }
 
     logger.info({
       message: "PR analysis completed successfully",

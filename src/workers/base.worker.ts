@@ -1,6 +1,17 @@
 import { redisClient } from "../utils/redis";
 import logger from "../utils/logger";
-import { WorkerConfig, WorkerStats } from "./types/worker";
+import { WorkerConfig, WorkerStats, RetryConfig } from "./types/worker";
+
+/**
+ * Default retry configuration
+ */
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  baseDelay: 1000, // 1 second
+  maxDelay: 30000, // 30 seconds
+  useExponentialBackoff: true,
+  retryableErrors: ["NetworkError", "TimeoutError", "RateLimitError"],
+};
 
 export abstract class BaseWorker {
   protected isProcessing: boolean = false;
@@ -21,6 +32,17 @@ export abstract class BaseWorker {
       cleanupInterval: parseInt(process.env.CLEANUP_INTERVAL || "21600000", 10),
       maxJobAge: parseInt(process.env.MAX_JOB_AGE || "604800000", 10),
       statsInterval: parseInt(process.env.STATS_INTERVAL || "300000", 10),
+      retryConfig: {
+        ...DEFAULT_RETRY_CONFIG,
+        maxRetries: parseInt(process.env.MAX_RETRIES || "3", 10),
+        baseDelay: parseInt(process.env.RETRY_BASE_DELAY || "1000", 10),
+        maxDelay: parseInt(process.env.RETRY_MAX_DELAY || "30000", 10),
+        useExponentialBackoff: process.env.USE_EXPONENTIAL_BACKOFF !== "false",
+        retryableErrors: (
+          process.env.RETRYABLE_ERRORS ||
+          "NetworkError,TimeoutError,RateLimitError"
+        ).split(","),
+      },
       ...config,
     };
 
@@ -31,16 +53,50 @@ export abstract class BaseWorker {
         completed: 0,
         failed: 0,
         total: 0,
+        retrying: 0,
+        averageRetries: 0,
       },
       uptime: 0,
       lastCleanup: null,
       lastError: null,
+      retriesAttempted: 0,
+      retriesSucceeded: 0,
     };
+  }
+
+  /**
+   * Calculates the delay for the next retry attempt using exponential backoff.
+   * @param attempt - The current retry attempt number (1-based)
+   * @returns The delay in milliseconds
+   */
+  protected calculateRetryDelay(attempt: number): number {
+    const { baseDelay, maxDelay, useExponentialBackoff } =
+      this.config.retryConfig;
+
+    if (!useExponentialBackoff) {
+      return baseDelay;
+    }
+
+    // Exponential backoff: baseDelay * 2^(attempt-1)
+    const delay = baseDelay * Math.pow(2, attempt - 1);
+    return Math.min(delay, maxDelay);
+  }
+
+  /**
+   * Determines if an error should trigger a retry based on the retry configuration.
+   * @param error - The error that occurred
+   * @returns Whether the error should trigger a retry
+   */
+  protected shouldRetry(error: Error): boolean {
+    const { retryableErrors } = this.config.retryConfig;
+    // Only retry if the error name matches one of our retryable error types
+    return Boolean(error?.name && retryableErrors.includes(error.name));
   }
 
   protected abstract initialize(): Promise<void>;
   protected abstract cleanup(): Promise<void>;
   protected abstract getStats(): Promise<WorkerStats>;
+  protected abstract startProcessing(): Promise<void>;
 
   /**
    * Starts the worker process.
@@ -62,6 +118,7 @@ export abstract class BaseWorker {
       logger.info({ message: "Worker initialized" });
 
       this.isProcessing = true;
+      await this.startProcessing();
       logger.info({ message: "Worker started" });
 
       // Start cleanup interval

@@ -1,6 +1,5 @@
 import { redisClient } from "../../utils/redis";
 import logger from "../../utils/logger";
-import { analyzePullRequest } from "./analysis.service";
 import {
   AnalysisJob,
   QueueStats,
@@ -14,7 +13,6 @@ export class AnalysisQueue {
   private static instance: AnalysisQueue;
   private readonly config: QueueConfig;
   private isProcessing: boolean = false;
-  private workers: Set<Promise<void>> = new Set();
 
   private constructor(config: Partial<QueueConfig> = {}) {
     this.config = { ...DEFAULT_QUEUE_CONFIG, ...config };
@@ -27,9 +25,10 @@ export class AnalysisQueue {
     return AnalysisQueue.instance;
   }
 
-  public async initialize(): Promise<void> {
+  public async start(): Promise<void> {
     try {
       await redisClient.connect();
+      this.isProcessing = true;
       logger.info({ message: "Redis Client Connected" });
     } catch (error) {
       logger.error({ message: "Failed to connect to Redis", error });
@@ -44,6 +43,7 @@ export class AnalysisQueue {
       params,
       created_at: Date.now(),
       updated_at: Date.now(),
+      retryCount: 0,
     };
 
     try {
@@ -109,100 +109,101 @@ export class AnalysisQueue {
     }
   }
 
-  public async processJobs(): Promise<void> {
-    if (this.isProcessing) {
-      return;
+  public async getNextJob(): Promise<AnalysisJob | null> {
+    try {
+      if (!this.isProcessing) {
+        return null;
+      }
+
+      const client = redisClient.getClient();
+      const jobId = await client.rPop(this.config.queueKey);
+      if (!jobId) {
+        return null;
+      }
+
+      const job = await this.getJob(jobId);
+      if (!job) {
+        logger.warn({ message: `Job ${jobId} not found` });
+        return null;
+      }
+
+      await this.updateJobStatus(jobId, "processing");
+      return job;
+    } catch (error) {
+      logger.error({ message: "Failed to get next job", error });
+      return null;
     }
-
-    this.isProcessing = true;
-    logger.info({ message: "Starting job processing" });
-
-    // Start multiple workers based on workerCount
-    for (let i = 0; i < this.config.workerCount; i++) {
-      const worker = this.startWorker();
-      this.workers.add(worker);
-      worker.finally(() => this.workers.delete(worker));
-    }
-
-    // Wait for all workers to complete
-    await Promise.all(this.workers);
   }
 
-  private async startWorker(): Promise<void> {
+  public async completeJob(jobId: string, result: JobResult): Promise<void> {
+    await this.updateJobStatus(jobId, "completed", result);
+  }
+
+  public async failJob(jobId: string, error: Error): Promise<void> {
+    await this.updateJobStatus(
+      jobId,
+      "failed",
+      { success: false, error: error.message },
+      error.message
+    );
+  }
+
+  public async retryJob(jobId: string, delay: number): Promise<void> {
     try {
+      const job = await this.getJob(jobId);
+      if (!job) {
+        throw new Error(`Job ${jobId} not found`);
+      }
+
+      const nextRetryCount = (job.retryCount || 0) + 1;
+      const updatedJob: AnalysisJob = {
+        ...job,
+        status: nextRetryCount > 3 ? "failed" : "retrying",
+        retryCount: nextRetryCount,
+        updated_at: Date.now(),
+      };
+
       const client = redisClient.getClient();
-      while (this.isProcessing) {
-        // Get next job from queue
-        const jobId = await client.rPop(this.config.queueKey);
+      await client.set(
+        `${this.config.jobsKey}:${jobId}`,
+        JSON.stringify(updatedJob)
+      );
 
-        if (!jobId) {
-          // No jobs in queue, wait a bit
-          await new Promise((resolve) =>
-            setTimeout(resolve, this.config.pollInterval)
-          );
-          continue;
-        }
-
-        logger.info({ message: `Processing job ${jobId}` });
-
+      // Only add back to queue if not failed
+      if (updatedJob.status === "retrying") {
+        // Add job back to queue after delay
+        await new Promise((resolve) => setTimeout(resolve, delay));
         try {
-          // Get job details
-          const job = await this.getJob(jobId);
-          if (!job) {
-            logger.warn({ message: `Job ${jobId} not found` });
-            continue;
-          }
-
-          // Update status to processing
-          await this.updateJobStatus(jobId, "processing");
-
-          // Process the job
-          await this.processJob(job);
-
-          // Update status to completed
-          await this.updateJobStatus(jobId, "completed", { success: true });
-          logger.info({ message: `Completed job ${jobId}` });
+          await client.lPush(this.config.queueKey, jobId);
+          logger.info({
+            message: "Retried job added back to queue",
+            jobId,
+            retryCount: updatedJob.retryCount,
+          });
         } catch (error) {
           logger.error({
-            message: `Error processing job ${jobId}`,
-            error: error instanceof Error ? error.message : "Unknown error",
-          });
-          await this.updateJobStatus(
+            message: "Failed to add retried job back to queue",
             jobId,
-            "failed",
-            {
-              success: false,
-              error: error instanceof Error ? error.message : "Unknown error",
-            },
-            error instanceof Error ? error.message : "Unknown error"
-          );
+            error,
+          });
+          throw error;
         }
+
+        logger.info({
+          message: "Job scheduled for retry",
+          jobId,
+          retryCount: updatedJob.retryCount,
+          delay,
+        });
+      } else {
+        logger.info({
+          message: "Job failed after max retries",
+          jobId,
+          retryCount: updatedJob.retryCount,
+        });
       }
     } catch (error) {
-      logger.error({
-        message: "Error in job processing loop",
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-      this.isProcessing = false;
-      throw error;
-    }
-  }
-
-  private async processJob(job: AnalysisJob): Promise<void> {
-    try {
-      await analyzePullRequest(job.params);
-      logger.info({
-        message: "Job processed successfully",
-        jobId: job.id,
-      });
-    } catch (error) {
-      logger.error({
-        message: "Failed to analyze pull request",
-        error: error instanceof Error ? error.message : "Unknown error",
-        owner: job.params.owner,
-        repo: job.params.repo,
-        pull_number: job.params.pull_number,
-      });
+      logger.error({ message: "Failed to retry job", error });
       throw error;
     }
   }
@@ -211,11 +212,7 @@ export class AnalysisQueue {
     this.isProcessing = false;
   }
 
-  public setWorkerCount(count: number): void {
-    this.config.workerCount = count;
-  }
-
-  public async getQueueStats(): Promise<QueueStats> {
+  public async getStats(): Promise<QueueStats> {
     try {
       const client = redisClient.getClient();
       const jobs = await client.keys(`${this.config.jobsKey}:*`);
@@ -224,17 +221,24 @@ export class AnalysisQueue {
         processing: 0,
         completed: 0,
         failed: 0,
+        retrying: 0,
         total: jobs.length,
+        averageRetries: 0,
       };
 
+      let totalRetries = 0;
       for (const jobKey of jobs) {
         const jobData = await client.get(jobKey);
         if (jobData) {
           const job: AnalysisJob = JSON.parse(jobData);
           stats[job.status]++;
+          if (job.retryCount) {
+            totalRetries += job.retryCount;
+          }
         }
       }
 
+      stats.averageRetries = stats.total > 0 ? totalRetries / stats.total : 0;
       return stats;
     } catch (error) {
       logger.error({ message: "Failed to get queue stats", error });
@@ -242,9 +246,7 @@ export class AnalysisQueue {
     }
   }
 
-  public async cleanupOldJobs(
-    maxAge: number = this.config.maxJobAge
-  ): Promise<void> {
+  public async cleanup(): Promise<void> {
     try {
       const client = redisClient.getClient();
       const jobs = await client.keys(`${this.config.jobsKey}:*`);
@@ -254,9 +256,13 @@ export class AnalysisQueue {
         const jobData = await client.get(jobKey);
         if (jobData) {
           const job: AnalysisJob = JSON.parse(jobData);
-          if (now - job.updated_at > maxAge) {
+          if (now - job.updated_at > this.config.maxJobAge) {
             await client.del(jobKey);
-            logger.info({ message: `Cleaned up old job ${job.id}` });
+            logger.info({
+              message: "Cleaned up old job",
+              jobId: job.id,
+              age: now - job.updated_at,
+            });
           }
         }
       }

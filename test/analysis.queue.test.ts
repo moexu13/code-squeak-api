@@ -33,7 +33,7 @@ describe("AnalysisQueue", () => {
   beforeAll(async () => {
     await redisClient.connect();
     queue = AnalysisQueue.getInstance();
-    await queue.initialize();
+    await queue.start();
   });
 
   afterAll(async () => {
@@ -94,7 +94,7 @@ describe("AnalysisQueue", () => {
     const job = await queue.addJob(params);
 
     // Start processing in the background
-    const processPromise = queue.processJobs();
+    const processPromise = queue.start();
 
     // Wait for processing to complete
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -123,7 +123,7 @@ describe("AnalysisQueue", () => {
     const job = await queue.addJob(params);
 
     // Start processing in the background
-    const processPromise = queue.processJobs();
+    const processPromise = queue.start();
 
     // Wait for processing to complete
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -151,7 +151,7 @@ describe("AnalysisQueue", () => {
     const job = await queue.addJob(params);
 
     // Start processing in the background
-    const processPromise = queue.processJobs();
+    const processPromise = queue.start();
 
     // Wait for processing to complete
     await new Promise((resolve) => setTimeout(resolve, 2000));

@@ -1,5 +1,7 @@
 import { AnalysisQueue } from "../api/analysis/analysis.queue";
 import { BaseWorker } from "./base.worker";
+import { analyzePullRequest } from "../api/analysis/analysis.service";
+import logger from "../utils/logger";
 import { WorkerStats } from "./types/worker";
 
 /**
@@ -20,6 +22,7 @@ export class AnalysisWorker extends BaseWorker {
       pollInterval: this.config.pollInterval,
       cleanupInterval: this.config.cleanupInterval,
       maxJobAge: this.config.maxJobAge,
+      retryConfig: this.config.retryConfig,
     });
   }
 
@@ -28,12 +31,7 @@ export class AnalysisWorker extends BaseWorker {
    * @throws {Error} If queue initialization fails
    */
   protected async initialize(): Promise<void> {
-    await this.queue.initialize();
-    this.processingPromise = this.queue.processJobs().catch((error) => {
-      this.stats.lastError =
-        error instanceof Error ? error : new Error(String(error));
-      this.isProcessing = false;
-    });
+    await this.queue.start();
   }
 
   /**
@@ -41,7 +39,7 @@ export class AnalysisWorker extends BaseWorker {
    * @throws {Error} If cleanup fails
    */
   protected async cleanup(): Promise<void> {
-    await this.queue.cleanupOldJobs();
+    await this.queue.cleanup();
   }
 
   /**
@@ -50,7 +48,7 @@ export class AnalysisWorker extends BaseWorker {
    * @throws {Error} If stats retrieval fails
    */
   protected async getStats(): Promise<WorkerStats> {
-    const queueStats = await this.queue.getQueueStats();
+    const queueStats = await this.queue.getStats();
     return {
       ...this.stats,
       queueStats,
@@ -67,8 +65,77 @@ export class AnalysisWorker extends BaseWorker {
    * @throws {Error} If stopping fails
    */
   public async stop(): Promise<void> {
-    this.queue.stopProcessing();
+    await this.queue.stopProcessing();
     await super.stop();
+  }
+
+  protected async startProcessing(): Promise<void> {
+    this.processingPromise = (async () => {
+      while (this.isProcessing) {
+        try {
+          const job = await this.queue.getNextJob();
+          if (!job) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, this.config.pollInterval)
+            );
+            continue;
+          }
+
+          try {
+            logger.info({
+              message: "Processing analysis job",
+              jobId: job.id,
+              params: job.params,
+            });
+
+            await analyzePullRequest(job.params);
+            await this.queue.completeJob(job.id, { success: true });
+
+            logger.info({
+              message: "Analysis job completed",
+              jobId: job.id,
+            });
+          } catch (error) {
+            const shouldRetry = this.shouldRetry(error as Error);
+            const retryCount = job.retryCount || 0;
+
+            if (shouldRetry && retryCount < 3) {
+              const delay = this.calculateRetryDelay(retryCount + 1);
+              logger.info({
+                message: "Retrying analysis job",
+                jobId: job.id,
+                retryCount: retryCount + 1,
+                delay,
+                error: error instanceof Error ? error.message : "Unknown error",
+              });
+
+              this.stats.retriesAttempted++;
+              await this.queue.retryJob(job.id, delay);
+            } else {
+              logger.error({
+                message: "Analysis job failed",
+                jobId: job.id,
+                error: error instanceof Error ? error.message : "Unknown error",
+                retryCount,
+                maxRetries: this.config.retryConfig.maxRetries,
+              });
+
+              await this.queue.failJob(
+                job.id,
+                error instanceof Error ? error : new Error(String(error))
+              );
+            }
+          }
+        } catch (error) {
+          logger.error({
+            message: "Error processing job",
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+          this.stats.lastError =
+            error instanceof Error ? error : new Error(String(error));
+        }
+      }
+    })();
   }
 }
 

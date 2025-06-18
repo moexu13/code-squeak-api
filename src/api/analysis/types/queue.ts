@@ -5,7 +5,12 @@
 /**
  * Status of a job in the queue
  */
-export type JobStatus = "pending" | "processing" | "completed" | "failed";
+export type JobStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "retrying";
 
 /**
  * Base parameters for a PR analysis job
@@ -39,6 +44,7 @@ export interface AnalysisJob {
   error?: string;
   created_at: number;
   updated_at: number;
+  retryCount?: number;
 }
 
 /**
@@ -49,7 +55,20 @@ export interface QueueStats {
   processing: number;
   completed: number;
   failed: number;
+  retrying: number;
   total: number;
+  averageRetries: number;
+}
+
+/**
+ * Configuration for retrying failed jobs
+ */
+export interface RetryConfig {
+  maxRetries: number;
+  baseDelay: number;
+  maxDelay: number;
+  useExponentialBackoff: boolean;
+  retryableErrors: string[];
 }
 
 /**
@@ -62,7 +81,19 @@ export interface QueueConfig {
   pollInterval: number;
   cleanupInterval: number;
   maxJobAge: number;
+  retryConfig: RetryConfig;
 }
+
+/**
+ * Default retry configuration
+ */
+export const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  baseDelay: 1000, // 1 second
+  maxDelay: 30000, // 30 seconds
+  useExponentialBackoff: true,
+  retryableErrors: ["NetworkError", "TimeoutError", "RateLimitError"],
+};
 
 /**
  * Default queue configuration
@@ -74,6 +105,7 @@ export const DEFAULT_QUEUE_CONFIG: QueueConfig = {
   pollInterval: 100, // milliseconds
   cleanupInterval: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
   maxJobAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+  retryConfig: DEFAULT_RETRY_CONFIG,
 };
 
 /**
@@ -84,6 +116,7 @@ export type QueueEvent =
   | { type: "job.started"; jobId: string }
   | { type: "job.completed"; job: AnalysisJob }
   | { type: "job.failed"; jobId: string; error: string }
+  | { type: "job.retrying"; jobId: string; retryCount: number; delay: number }
   | { type: "queue.stats"; stats: QueueStats };
 
 /**
