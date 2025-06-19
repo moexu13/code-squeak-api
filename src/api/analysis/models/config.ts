@@ -16,11 +16,14 @@ export function getModelSettings(model: string): ModelSettings {
     "claude-3-sonnet-20240229",
     "claude-3-opus-20240229",
     "claude-3-haiku-20240307",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-opus-20241022",
+    "claude-3-5-haiku-20241022",
   ];
 
   // If model is not specified, use the default from env
   if (!model) {
-    model = process.env.DEFAULT_MODEL || "claude-3-5-haiku-latest";
+    model = process.env.DEFAULT_MODEL || "claude-3-5-haiku-20241022";
   }
 
   // Check if the model is supported

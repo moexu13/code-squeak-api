@@ -4,20 +4,23 @@
   "version": "0.0.0",
   "type": "commonjs",
   "scripts": {
-    "dev": "ts-node-dev --respawn src/server.ts",
-    "build": "vite build",
+    "dev": "concurrently \"ts-node-dev --respawn src/server.ts\" \"ts-node-dev --respawn src/workers/analysis.worker.ts\"",
+    "build": "tsc",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "list-models": "ts-node src/scripts/list-models.ts"
+    "list-models": "ts-node src/scripts/list-models.ts",
+    "worker": "ts-node src/workers/analysis.worker.ts"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/http-errors": "^2.0.5",
     "@types/node": "^22.15.32",
     "@types/supertest": "^6.0.3",
+    "concurrently": "^9.1.2",
     "supertest": "^7.1.1",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "typescript": "^5.8.3",
     "vite": "^6.3.5"
   },
   "dependencies": {
@@ -33,7 +36,6 @@
     "ioredis": "^5.6.1",
     "redis": "^5.5.6",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
     "vite-express": "^0.21.1",
     "vitest": "^3.2.3"
   }

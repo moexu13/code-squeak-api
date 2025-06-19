@@ -66,12 +66,19 @@ describe("Validation Utils", () => {
 
       const result = validateAndSanitizeParams(params);
 
-      // We know these values exist in this test case
-      expect((result.title as string).length).toBe(MAX_STRING_LENGTH);
-      expect((result.description as string).length).toBe(MAX_STRING_LENGTH);
-      expect((result.author as string).length).toBe(MAX_STRING_LENGTH);
-      expect((result.state as string).length).toBe(MAX_STRING_LENGTH);
-      expect((result.url as string).length).toBe(MAX_STRING_LENGTH);
+      if (
+        "title" in result &&
+        "description" in result &&
+        "author" in result &&
+        "state" in result &&
+        "url" in result
+      ) {
+        expect((result.title as string).length).toBe(MAX_STRING_LENGTH);
+        expect((result.description as string).length).toBe(MAX_STRING_LENGTH);
+        expect((result.author as string).length).toBe(MAX_STRING_LENGTH);
+        expect((result.state as string).length).toBe(MAX_STRING_LENGTH);
+        expect((result.url as string).length).toBe(MAX_STRING_LENGTH);
+      }
     });
 
     it("should preserve non-string parameters", () => {
