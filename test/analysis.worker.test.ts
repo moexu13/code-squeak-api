@@ -109,7 +109,7 @@ describe("AnalysisWorker", () => {
       maxDelay: 500, // 500ms instead of 30s
       useExponentialBackoff: false, // Use constant delay for predictable timing
     };
-    queue = AnalysisQueue.getInstance();
+    queue = await AnalysisQueue.getInstanceAsync();
     await worker.start();
   });
 

@@ -117,6 +117,7 @@ export abstract class BaseWorker {
       await this.initialize();
       logger.info({ message: "Worker initialized" });
 
+      // Set processing flag before starting the processing loop
       this.isProcessing = true;
       await this.startProcessing();
       logger.info({ message: "Worker started" });

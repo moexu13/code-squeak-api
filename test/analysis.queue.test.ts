@@ -6,9 +6,11 @@ import {
   afterAll,
   beforeEach,
   vi,
+  afterEach,
 } from "vitest";
 import { redisClient } from "../src/utils/redis";
 import { AnalysisQueue } from "../src/api/analysis/analysis.queue";
+import { AnalysisWorker } from "../src/workers/analysis.worker";
 import { PRAnalysisParams } from "../src/api/analysis/types/queue";
 
 // Mock the module before any imports that use it
@@ -29,27 +31,29 @@ import { analyzePullRequest } from "../src/api/analysis/analysis.service";
 
 describe("AnalysisQueue", () => {
   let queue: AnalysisQueue;
+  let worker: AnalysisWorker | undefined;
 
   beforeAll(async () => {
     await redisClient.connect();
     queue = AnalysisQueue.getInstance();
-    await queue.start();
   });
 
   afterAll(async () => {
-    await queue.stopProcessing();
     await redisClient.disconnect();
   });
 
   beforeEach(async () => {
-    // Clean up Redis keys before each test
+    // Reset mock
+    vi.mocked(analyzePullRequest).mockReset();
+  });
+
+  afterEach(async () => {
+    // Clean up Redis keys after each test
     const client = redisClient.getClient();
     const keys = await client.keys("pr-analysis:*");
     if (keys.length > 0) {
       await client.del(keys);
     }
-    // Reset mock
-    vi.mocked(analyzePullRequest).mockReset();
   });
 
   it("should add a job to the queue", async () => {
@@ -85,6 +89,9 @@ describe("AnalysisQueue", () => {
   });
 
   it("should handle job processing", async () => {
+    // Mock analyzePullRequest to succeed
+    vi.mocked(analyzePullRequest).mockResolvedValueOnce(undefined);
+
     const params: PRAnalysisParams = {
       owner: "test-owner",
       repo: "test-repo",
@@ -93,8 +100,9 @@ describe("AnalysisQueue", () => {
 
     const job = await queue.addJob(params);
 
-    // Start processing in the background
-    const processPromise = queue.start();
+    // Start a worker to process the job
+    worker = new AnalysisWorker();
+    await worker.start();
 
     // Wait for processing to complete
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -102,10 +110,13 @@ describe("AnalysisQueue", () => {
     // Check job status
     const retrievedJob = await queue.getJob(job.id);
     expect(retrievedJob?.status).toBe("completed");
-
     // Clean up
-    await queue.stopProcessing();
-    await processPromise.catch(() => {});
+    await worker.stop();
+    worker = undefined;
+    // Reset queue singleton
+    (AnalysisQueue as any).instance = null;
+    await redisClient.connect();
+    queue = await AnalysisQueue.getInstanceAsync();
   });
 
   it("should handle job failures and retries", async () => {
@@ -122,8 +133,9 @@ describe("AnalysisQueue", () => {
 
     const job = await queue.addJob(params);
 
-    // Start processing in the background
-    const processPromise = queue.start();
+    // Start a worker to process the job
+    worker = new AnalysisWorker();
+    await worker.start();
 
     // Wait for processing to complete
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -133,9 +145,12 @@ describe("AnalysisQueue", () => {
     expect(retrievedJob?.status).toBe("failed");
     expect(retrievedJob?.error).toBeDefined();
 
-    // Clean up
-    await queue.stopProcessing();
-    await processPromise.catch(() => {});
+    // Clean up (after all assertions)
+    await worker.stop();
+    worker = undefined;
+    (AnalysisQueue as any).instance = null;
+    await redisClient.connect();
+    queue = await AnalysisQueue.getInstanceAsync();
   });
 
   it("should mark job as failed after max retries", async () => {
@@ -150,8 +165,9 @@ describe("AnalysisQueue", () => {
 
     const job = await queue.addJob(params);
 
-    // Start processing in the background
-    const processPromise = queue.start();
+    // Start a worker to process the job
+    worker = new AnalysisWorker();
+    await worker.start();
 
     // Wait for processing to complete
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -161,8 +177,11 @@ describe("AnalysisQueue", () => {
     expect(retrievedJob?.status).toBe("failed");
     expect(retrievedJob?.error).toBeDefined();
 
-    // Clean up
-    await queue.stopProcessing();
-    await processPromise.catch(() => {});
+    // Clean up (after all assertions)
+    await worker.stop();
+    worker = undefined;
+    (AnalysisQueue as any).instance = null;
+    await redisClient.connect();
+    queue = await AnalysisQueue.getInstanceAsync();
   }, 10000); // Increase timeout for this test
 });

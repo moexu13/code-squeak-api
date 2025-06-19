@@ -10,7 +10,8 @@ import {
 } from "./types/queue";
 
 export class AnalysisQueue {
-  private static instance: AnalysisQueue;
+  private static instance: AnalysisQueue | null = null;
+  private static initializationPromise: Promise<AnalysisQueue> | null = null;
   private readonly config: QueueConfig;
   private isProcessing: boolean = false;
 
@@ -21,6 +22,22 @@ export class AnalysisQueue {
   public static getInstance(config?: Partial<QueueConfig>): AnalysisQueue {
     if (!AnalysisQueue.instance) {
       AnalysisQueue.instance = new AnalysisQueue(config);
+    }
+    return AnalysisQueue.instance;
+  }
+
+  public static async getInstanceAsync(
+    config?: Partial<QueueConfig>
+  ): Promise<AnalysisQueue> {
+    if (!AnalysisQueue.instance) {
+      if (!AnalysisQueue.initializationPromise) {
+        AnalysisQueue.initializationPromise = (async () => {
+          const instance = new AnalysisQueue(config);
+          await instance.start();
+          return instance;
+        })();
+      }
+      AnalysisQueue.instance = await AnalysisQueue.initializationPromise;
     }
     return AnalysisQueue.instance;
   }

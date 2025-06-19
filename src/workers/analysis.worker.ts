@@ -9,7 +9,7 @@ import { WorkerStats } from "./types/worker";
  * Extends the base worker to handle queue-specific operations.
  */
 export class AnalysisWorker extends BaseWorker {
-  private queue: AnalysisQueue;
+  private queue: AnalysisQueue | null = null;
 
   /**
    * Creates a new analysis worker instance.
@@ -17,7 +17,14 @@ export class AnalysisWorker extends BaseWorker {
    */
   constructor() {
     super();
-    this.queue = AnalysisQueue.getInstance({
+  }
+
+  /**
+   * Initializes the worker by setting up the queue and starting job processing.
+   * @throws {Error} If queue initialization fails
+   */
+  protected async initialize(): Promise<void> {
+    this.queue = await AnalysisQueue.getInstanceAsync({
       workerCount: this.config.workerCount,
       pollInterval: this.config.pollInterval,
       cleanupInterval: this.config.cleanupInterval,
@@ -27,18 +34,13 @@ export class AnalysisWorker extends BaseWorker {
   }
 
   /**
-   * Initializes the worker by setting up the queue and starting job processing.
-   * @throws {Error} If queue initialization fails
-   */
-  protected async initialize(): Promise<void> {
-    await this.queue.start();
-  }
-
-  /**
    * Performs cleanup of old jobs in the queue.
    * @throws {Error} If cleanup fails
    */
   protected async cleanup(): Promise<void> {
+    if (!this.queue) {
+      throw new Error("Queue not initialized");
+    }
     await this.queue.cleanup();
   }
 
@@ -48,6 +50,9 @@ export class AnalysisWorker extends BaseWorker {
    * @throws {Error} If stats retrieval fails
    */
   protected async getStats(): Promise<WorkerStats> {
+    if (!this.queue) {
+      throw new Error("Queue not initialized");
+    }
     const queueStats = await this.queue.getStats();
     return {
       ...this.stats,
@@ -65,15 +70,26 @@ export class AnalysisWorker extends BaseWorker {
    * @throws {Error} If stopping fails
    */
   public async stop(): Promise<void> {
-    await this.queue.stopProcessing();
+    if (this.queue) {
+      // Set the queue to not processing mode
+      this.queue["isProcessing"] = false;
+      await this.queue.stopProcessing();
+    }
     await super.stop();
   }
 
   protected async startProcessing(): Promise<void> {
+    if (!this.queue) {
+      throw new Error("Queue not initialized");
+    }
+
+    // Set the queue to processing mode
+    this.queue["isProcessing"] = true;
+
     this.processingPromise = (async () => {
       while (this.isProcessing) {
         try {
-          const job = await this.queue.getNextJob();
+          const job = await this.queue!.getNextJob();
           if (!job) {
             await new Promise((resolve) =>
               setTimeout(resolve, this.config.pollInterval)
@@ -89,7 +105,7 @@ export class AnalysisWorker extends BaseWorker {
             });
 
             await analyzePullRequest(job.params);
-            await this.queue.completeJob(job.id, { success: true });
+            await this.queue!.completeJob(job.id, { success: true });
 
             logger.info({
               message: "Analysis job completed",
@@ -110,7 +126,7 @@ export class AnalysisWorker extends BaseWorker {
               });
 
               this.stats.retriesAttempted++;
-              await this.queue.retryJob(job.id, delay);
+              await this.queue!.retryJob(job.id, delay);
             } else {
               logger.error({
                 message: "Analysis job failed",
@@ -120,7 +136,7 @@ export class AnalysisWorker extends BaseWorker {
                 maxRetries: this.config.retryConfig.maxRetries,
               });
 
-              await this.queue.failJob(
+              await this.queue!.failJob(
                 job.id,
                 error instanceof Error ? error : new Error(String(error))
               );
