@@ -1,5 +1,6 @@
 import logger from "../../utils/logger";
 import { getCached, setCached, generateCacheKey } from "../../utils/cache";
+import { sanitizeErrorMessage } from "../../utils/sanitize";
 import { DEFAULT_REVIEW_PROMPT } from "./prompts";
 import { ModelConfig, ModelResponse } from "./models/base.model";
 import { getModelSettings } from "./models/config";
@@ -106,7 +107,9 @@ export async function analyze({
   } catch (error) {
     logger.error({
       message: "Error analyzing diff",
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: sanitizeErrorMessage(
+        error instanceof Error ? error.message : "Unknown error"
+      ),
       diff_length: diff.length,
     });
 
@@ -290,7 +293,9 @@ export async function analyzePullRequest({
   } catch (error) {
     logger.error({
       message: "Failed to analyze pull request",
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: sanitizeErrorMessage(
+        error instanceof Error ? error.message : "Unknown error"
+      ),
       owner,
       repo,
       pull_number,
@@ -300,11 +305,12 @@ export async function analyzePullRequest({
       throw error;
     }
 
-    throw new StatusError("Failed to analyze pull request", 500, {
-      owner,
-      repo,
-      pull_number,
-      originalError: error instanceof Error ? error.message : String(error),
-    });
+    // Re-throw with sanitized error message for logging
+    const sanitizedError = new Error(
+      sanitizeErrorMessage(
+        error instanceof Error ? error.message : String(error)
+      )
+    );
+    throw sanitizedError;
   }
 }
