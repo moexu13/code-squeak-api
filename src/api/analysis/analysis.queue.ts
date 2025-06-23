@@ -1,5 +1,6 @@
 import { redisClient } from "../../utils/redis";
 import logger from "../../utils/logger";
+import { sanitizeErrorMessage } from "../../utils/sanitize";
 import {
   AnalysisJob,
   QueueStats,
@@ -48,7 +49,12 @@ export class AnalysisQueue {
       this.isProcessing = true;
       logger.info({ message: "Redis Client Connected" });
     } catch (error) {
-      logger.error({ message: "Failed to connect to Redis", error });
+      logger.error({
+        message: "Failed to connect to Redis",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
       throw error;
     }
   }
@@ -78,7 +84,12 @@ export class AnalysisQueue {
       });
       return job;
     } catch (error) {
-      logger.error({ message: "Failed to add job to queue", error });
+      logger.error({
+        message: "Failed to add job to queue",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
       throw error;
     }
   }
@@ -89,7 +100,12 @@ export class AnalysisQueue {
       const jobData = await client.get(`${this.config.jobsKey}:${jobId}`);
       return jobData ? JSON.parse(jobData) : null;
     } catch (error) {
-      logger.error({ message: "Failed to get job", error });
+      logger.error({
+        message: "Failed to get job",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
       return null;
     }
   }
@@ -121,7 +137,12 @@ export class AnalysisQueue {
       );
       logger.info({ message: `Updated job ${jobId} status to ${status}` });
     } catch (error) {
-      logger.error({ message: "Failed to update job status", error });
+      logger.error({
+        message: "Failed to update job status",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
       throw error;
     }
   }
@@ -147,7 +168,12 @@ export class AnalysisQueue {
       await this.updateJobStatus(jobId, "processing");
       return job;
     } catch (error) {
-      logger.error({ message: "Failed to get next job", error });
+      logger.error({
+        message: "Failed to get next job",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
       return null;
     }
   }
@@ -201,7 +227,9 @@ export class AnalysisQueue {
           logger.error({
             message: "Failed to add retried job back to queue",
             jobId,
-            error,
+            error: sanitizeErrorMessage(
+              error instanceof Error ? error.message : String(error)
+            ),
           });
           throw error;
         }
@@ -220,7 +248,12 @@ export class AnalysisQueue {
         });
       }
     } catch (error) {
-      logger.error({ message: "Failed to retry job", error });
+      logger.error({
+        message: "Failed to retry job",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
       throw error;
     }
   }
@@ -258,7 +291,12 @@ export class AnalysisQueue {
       stats.averageRetries = stats.total > 0 ? totalRetries / stats.total : 0;
       return stats;
     } catch (error) {
-      logger.error({ message: "Failed to get queue stats", error });
+      logger.error({
+        message: "Failed to get queue stats",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
       throw error;
     }
   }
@@ -284,7 +322,12 @@ export class AnalysisQueue {
         }
       }
     } catch (error) {
-      logger.error({ message: "Failed to cleanup old jobs", error });
+      logger.error({
+        message: "Failed to cleanup old jobs",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
       throw error;
     }
   }
