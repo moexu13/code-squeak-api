@@ -1,5 +1,6 @@
 import { redisClient } from "../utils/redis";
 import logger from "../utils/logger";
+import { sanitizeErrorMessage } from "../utils/sanitize";
 import { WorkerConfig, WorkerStats, RetryConfig } from "./types/worker";
 
 /**
@@ -132,7 +133,7 @@ export abstract class BaseWorker {
             error instanceof Error ? error : new Error(String(error));
           logger.error({
             message: "Error in cleanup job",
-            error: this.stats.lastError.message,
+            error: sanitizeErrorMessage(this.stats.lastError.message),
           });
         }
       }, this.config.cleanupInterval);
@@ -150,7 +151,7 @@ export abstract class BaseWorker {
             error instanceof Error ? error : new Error(String(error));
           logger.error({
             message: "Error getting worker stats",
-            error: this.stats.lastError.message,
+            error: sanitizeErrorMessage(this.stats.lastError.message),
           });
         }
       }, this.config.statsInterval);
@@ -161,7 +162,9 @@ export abstract class BaseWorker {
     } catch (error) {
       logger.error({
         message: "Error starting worker",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : "Unknown error"
+        ),
       });
       this.isProcessing = false;
       throw error;
@@ -211,7 +214,9 @@ export abstract class BaseWorker {
     } catch (error) {
       logger.error({
         message: "Error stopping worker",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: sanitizeErrorMessage(
+          error instanceof Error ? error.message : "Unknown error"
+        ),
       });
       throw error;
     }

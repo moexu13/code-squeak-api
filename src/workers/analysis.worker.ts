@@ -2,6 +2,7 @@ import { AnalysisQueue } from "../api/analysis/analysis.queue";
 import { BaseWorker } from "./base.worker";
 import { analyzePullRequest } from "../api/analysis/analysis.service";
 import logger from "../utils/logger";
+import { sanitizeErrorMessage } from "../utils/sanitize";
 import { WorkerStats } from "./types/worker";
 
 /**
@@ -122,7 +123,9 @@ export class AnalysisWorker extends BaseWorker {
                 jobId: job.id,
                 retryCount: retryCount + 1,
                 delay,
-                error: error instanceof Error ? error.message : "Unknown error",
+                error: sanitizeErrorMessage(
+                  error instanceof Error ? error.message : "Unknown error"
+                ),
               });
 
               this.stats.retriesAttempted++;
@@ -131,7 +134,9 @@ export class AnalysisWorker extends BaseWorker {
               logger.error({
                 message: "Analysis job failed",
                 jobId: job.id,
-                error: error instanceof Error ? error.message : "Unknown error",
+                error: sanitizeErrorMessage(
+                  error instanceof Error ? error.message : "Unknown error"
+                ),
                 retryCount,
                 maxRetries: this.config.retryConfig.maxRetries,
               });
@@ -145,7 +150,9 @@ export class AnalysisWorker extends BaseWorker {
         } catch (error) {
           logger.error({
             message: "Error processing job",
-            error: error instanceof Error ? error.message : "Unknown error",
+            error: sanitizeErrorMessage(
+              error instanceof Error ? error.message : "Unknown error"
+            ),
           });
           this.stats.lastError =
             error instanceof Error ? error : new Error(String(error));
