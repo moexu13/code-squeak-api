@@ -183,11 +183,12 @@ export class AnalysisQueue {
   }
 
   public async failJob(jobId: string, error: Error): Promise<void> {
+    const sanitizedErrorMessage = sanitizeErrorMessage(error.message);
     await this.updateJobStatus(
       jobId,
       "failed",
-      { success: false, error: error.message },
-      error.message
+      { success: false, error: sanitizedErrorMessage },
+      sanitizedErrorMessage
     );
   }
 
