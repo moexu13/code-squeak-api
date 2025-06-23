@@ -306,11 +306,13 @@ export async function analyzePullRequest({
     }
 
     // Re-throw with sanitized error message for logging
-    const sanitizedError = new Error(
-      sanitizeErrorMessage(
+    throw new StatusError("Failed to analyze pull request", 500, {
+      owner,
+      repo,
+      pull_number,
+      originalError: sanitizeErrorMessage(
         error instanceof Error ? error.message : String(error)
-      )
-    );
-    throw sanitizedError;
+      ),
+    });
   }
 }
