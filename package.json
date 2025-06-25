@@ -14,9 +14,9 @@
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/http-errors": "^2.0.5",
-    "@types/node": "^22.15.32",
+    "@types/node": "^22.15.33",
     "@types/supertest": "^6.0.3",
-    "concurrently": "^9.1.2",
+    "concurrently": "^9.2.0",
     "supertest": "^7.1.1",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
@@ -28,7 +28,7 @@
     "@octokit/app": "^16.0.1",
     "@octokit/auth-app": "^8.0.1",
     "@octokit/rest": "^21.1.1",
-    "@sentry/node": "^9.29.0",
+    "@sentry/node": "^9.32.0",
     "@unkey/api": "^0.36.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
@@ -37,6 +37,6 @@
     "redis": "^5.5.6",
     "tsx": "^4.20.3",
     "vite-express": "^0.21.1",
-    "vitest": "^3.2.3"
+    "vitest": "^3.2.4"
   }
 }
