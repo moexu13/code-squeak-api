@@ -25,6 +25,7 @@ app.use(express.json());
 // Import routes
 import analysisRouter from "./api/analysis/analysis.routes";
 import githubRouter from "./api/github/github.routes";
+import webhooksRouter from "./api/webhooks/webhooks.routes";
 import errorHandler from "./errors/errorHandler";
 import { NotFoundError } from "./errors/http";
 import authMiddleware from "./middleware/auth";
@@ -35,6 +36,7 @@ app.use(authMiddleware);
 // Mount routes
 app.use("/api/v1/code-analysis", analysisRouter);
 app.use("/api/v1/github", githubRouter);
+app.use("/api/v1/webhooks", webhooksRouter);
 
 // Error handling
 app.use((req, _res, next) => {
