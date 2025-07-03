@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import logger from "../../utils/logger";
 import { StatusError } from "../../errors/status";
+import { RateLimiter } from "../../utils/rateLimiter";
 import {
   WebhookPayload,
   WebhookVerificationResult,
@@ -15,6 +16,13 @@ if (!WEBHOOK_SECRET) {
       "GITHUB_WEBHOOK_SECRET not set - webhook signature verification will be disabled",
   });
 }
+
+// Webhook rate limiter: 1 request per 5 minutes per repository
+const webhookRateLimiter = RateLimiter.getInstance({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  maxRequests: 1, // 1 request per 5 minutes
+  keyPrefix: "webhook:cooldown",
+});
 
 /**
  * Verifies the signature of a GitHub webhook request
@@ -175,11 +183,32 @@ export async function processWebhookEvent(event: GitHubWebhookEvent): Promise<{
   message: string;
 }> {
   try {
+    // Check rate limit for this repository
+    const rateLimitKey = `${event.repository.full_name}:${event.action}`;
+    const rateLimitResult = await webhookRateLimiter.checkLimit(rateLimitKey);
+
+    if (rateLimitResult.remaining === 0) {
+      logger.warn({
+        message: "Webhook rate limit exceeded",
+        repository: event.repository.full_name,
+        action: event.action,
+        resetTime: new Date(rateLimitResult.reset).toISOString(),
+      });
+
+      return {
+        success: false,
+        message: `Webhook processing in cooldown period. Resets at ${new Date(
+          rateLimitResult.reset
+        ).toISOString()}`,
+      };
+    }
+
     logger.info({
       message: "Processing webhook event",
       action: event.action,
       repository: event.repository.full_name,
       sender: event.sender.login,
+      remainingRequests: rateLimitResult.remaining,
     });
 
     // TODO: Implement specific webhook event processing logic
