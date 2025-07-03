@@ -113,7 +113,7 @@ async function handleWebhook(req: Request, res: Response) {
 /**
  * Health check endpoint for webhooks
  */
-async function healthCheck(req: Request, res: Response) {
+async function healthCheck(_req: Request, res: Response) {
   res.status(200).json({
     status: "healthy",
     message: "Webhook endpoint is ready",

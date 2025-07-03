@@ -2,7 +2,6 @@ import crypto from "crypto";
 import logger from "../../utils/logger";
 import { StatusError } from "../../errors/status";
 import {
-  WebhookSignature,
   WebhookPayload,
   WebhookVerificationResult,
   GitHubWebhookEvent,

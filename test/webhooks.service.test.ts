@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import crypto from "crypto";
-import { StatusError } from "../src/errors/status";
 
 // Mock environment variables
 const originalEnv = process.env;
@@ -21,7 +20,7 @@ describe("Webhooks Service", () => {
 
       // Re-import the module after setting the environment variable
       const { verifyWebhookSignature } = await import(
-        "../src/api/webhooks/webhooks.service"
+        "../src/api/webhooks/webhooks.service" as any
       );
 
       // Create a valid signature
@@ -48,7 +47,7 @@ describe("Webhooks Service", () => {
 
       // Re-import the module after setting the environment variable
       const { verifyWebhookSignature } = await import(
-        "../src/api/webhooks/webhooks.service"
+        "../src/api/webhooks/webhooks.service" as any
       );
 
       const invalidSignature = "sha256=invalid-signature";
@@ -68,7 +67,7 @@ describe("Webhooks Service", () => {
 
       // Re-import the module after setting the environment variable
       const { verifyWebhookSignature } = await import(
-        "../src/api/webhooks/webhooks.service"
+        "../src/api/webhooks/webhooks.service" as any
       );
 
       const oldTimestamp = (Math.floor(Date.now() / 1000) - 400).toString(); // 6+ minutes old
@@ -92,7 +91,7 @@ describe("Webhooks Service", () => {
 
       // Re-import the module after setting the environment variable
       const { verifyWebhookSignature } = await import(
-        "../src/api/webhooks/webhooks.service"
+        "../src/api/webhooks/webhooks.service" as any
       );
 
       const invalidSignature = "invalid-format";
@@ -112,7 +111,7 @@ describe("Webhooks Service", () => {
 
       // Re-import the module after setting the environment variable
       const { verifyWebhookSignature } = await import(
-        "../src/api/webhooks/webhooks.service"
+        "../src/api/webhooks/webhooks.service" as any
       );
 
       const signature = `sha1=some-signature`;
@@ -132,7 +131,7 @@ describe("Webhooks Service", () => {
 
       // Re-import the module after setting the environment variable
       const { verifyWebhookSignature } = await import(
-        "../src/api/webhooks/webhooks.service"
+        "../src/api/webhooks/webhooks.service" as any
       );
 
       const result = await verifyWebhookSignature(
@@ -149,7 +148,7 @@ describe("Webhooks Service", () => {
   describe("parseGitHubWebhookEvent", () => {
     it("should parse a valid webhook event", async () => {
       const { parseGitHubWebhookEvent } = await import(
-        "../src/api/webhooks/webhooks.service"
+        "../src/api/webhooks/webhooks.service" as any
       );
 
       const validPayload = {
@@ -173,7 +172,7 @@ describe("Webhooks Service", () => {
 
     it("should throw error for invalid payload structure", async () => {
       const { parseGitHubWebhookEvent } = await import(
-        "../src/api/webhooks/webhooks.service"
+        "../src/api/webhooks/webhooks.service" as any
       );
 
       const invalidPayload = {
@@ -188,7 +187,7 @@ describe("Webhooks Service", () => {
   describe("processWebhookEvent", () => {
     it("should process a valid webhook event", async () => {
       const { processWebhookEvent } = await import(
-        "../src/api/webhooks/webhooks.service"
+        "../src/api/webhooks/webhooks.service" as any
       );
 
       const event = {
