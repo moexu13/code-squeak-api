@@ -29,7 +29,7 @@ describe("Payload Limit Middleware", () => {
 
   it("should reject requests exceeding payload limit", async () => {
     // Add a route with 100 bytes limit
-    app.post("/limited", payloadLimit(100), (req, res) => {
+    app.post("/limited", payloadLimit(100), (_req, res) => {
       res.json({ success: true });
     });
 
@@ -57,7 +57,7 @@ describe("Payload Limit Middleware", () => {
     app.post(
       "/custom",
       payloadLimit(50, "Custom payload limit exceeded"),
-      (req, res) => {
+      (_req, res) => {
         res.json({ success: true });
       }
     );
@@ -83,7 +83,7 @@ describe("Payload Limit Middleware", () => {
 
   it("should handle requests without content-length header", async () => {
     // Add a route with limit
-    app.post("/no-length", payloadLimit(100), (req, res) => {
+    app.post("/no-length", payloadLimit(100), (_req, res) => {
       res.json({ success: true });
     });
 

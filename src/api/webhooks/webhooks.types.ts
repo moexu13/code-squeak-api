@@ -14,8 +14,8 @@ export interface WebhookPayload {
 
 export interface WebhookVerificationResult {
   isValid: boolean;
-  error?: string;
   timestamp?: number;
+  error?: string;
 }
 
 export interface GitHubWebhookEvent {

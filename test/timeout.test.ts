@@ -13,7 +13,7 @@ describe("Timeout Middleware", () => {
 
   it("should allow requests that complete within timeout", async () => {
     // Add a route with a 1-second timeout
-    app.get("/fast", timeout(1000), async (req, res) => {
+    app.get("/fast", timeout(1000), async (_req, res) => {
       // Simulate a fast operation
       await new Promise((resolve) => setTimeout(resolve, 100));
       res.json({ success: true });
@@ -26,7 +26,7 @@ describe("Timeout Middleware", () => {
 
   it("should timeout requests that take too long", async () => {
     // Add a route with a 100ms timeout
-    app.get("/slow", timeout(100), async (req, res) => {
+    app.get("/slow", timeout(100), async (_req, res) => {
       // Simulate a slow operation
       await new Promise((resolve) => setTimeout(resolve, 200));
       res.json({ success: true });
@@ -46,7 +46,7 @@ describe("Timeout Middleware", () => {
     app.get(
       "/custom",
       timeout(100, "Custom timeout message"),
-      async (req, res) => {
+      async (_req, res) => {
         await new Promise((resolve) => setTimeout(resolve, 200));
         res.json({ success: true });
       }

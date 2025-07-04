@@ -52,14 +52,11 @@ describe("Webhooks Service", () => {
 
       const invalidSignature = "sha256=invalid-signature";
 
-      const result = await verifyWebhookSignature(
-        testPayload,
-        invalidSignature,
-        testTimestamp
+      await expect(
+        verifyWebhookSignature(testPayload, invalidSignature, testTimestamp)
+      ).rejects.toThrowError(
+        expect.objectContaining({ name: "SignatureVerificationError" })
       );
-
-      expect(result.isValid).toBe(false);
-      expect(result.error).toBe("Signature verification failed");
     });
 
     it("should reject old timestamps", async () => {
@@ -76,14 +73,11 @@ describe("Webhooks Service", () => {
         .update(`${oldTimestamp}.${testPayload}`)
         .digest("hex")}`;
 
-      const result = await verifyWebhookSignature(
-        testPayload,
-        signature,
-        oldTimestamp
+      await expect(
+        verifyWebhookSignature(testPayload, signature, oldTimestamp)
+      ).rejects.toThrowError(
+        expect.objectContaining({ name: "TimestampValidationError" })
       );
-
-      expect(result.isValid).toBe(false);
-      expect(result.error).toBe("Timestamp validation failed");
     });
 
     it("should reject invalid signature format", async () => {
@@ -96,14 +90,11 @@ describe("Webhooks Service", () => {
 
       const invalidSignature = "invalid-format";
 
-      const result = await verifyWebhookSignature(
-        testPayload,
-        invalidSignature,
-        testTimestamp
+      await expect(
+        verifyWebhookSignature(testPayload, invalidSignature, testTimestamp)
+      ).rejects.toThrowError(
+        expect.objectContaining({ name: "InvalidSignatureFormatError" })
       );
-
-      expect(result.isValid).toBe(false);
-      expect(result.error).toBe("Invalid signature format");
     });
 
     it("should reject unsupported algorithms", async () => {
@@ -116,14 +107,11 @@ describe("Webhooks Service", () => {
 
       const signature = `sha1=some-signature`;
 
-      const result = await verifyWebhookSignature(
-        testPayload,
-        signature,
-        testTimestamp
+      await expect(
+        verifyWebhookSignature(testPayload, signature, testTimestamp)
+      ).rejects.toThrowError(
+        expect.objectContaining({ name: "InvalidSignatureFormatError" })
       );
-
-      expect(result.isValid).toBe(false);
-      expect(result.error).toBe("Unsupported signature algorithm");
     });
 
     it("should allow requests when no secret is configured", async () => {
@@ -180,7 +168,9 @@ describe("Webhooks Service", () => {
         // Missing repository and sender
       };
 
-      expect(() => parseGitHubWebhookEvent(invalidPayload)).toThrow();
+      expect(() => parseGitHubWebhookEvent(invalidPayload)).toThrowError(
+        expect.objectContaining({ name: "InvalidWebhookPayloadError" })
+      );
     });
   });
 

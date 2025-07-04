@@ -1,6 +1,11 @@
 import crypto from "crypto";
 import logger from "../../utils/logger";
-import { StatusError } from "../../errors/status";
+import {
+  InvalidSignatureFormatError,
+  TimestampValidationError,
+  SignatureVerificationError,
+  InvalidWebhookPayloadError,
+} from "../../errors/webhook";
 import { RateLimiter } from "../../utils/rateLimiter";
 import {
   WebhookPayload,
@@ -62,11 +67,7 @@ export async function verifyWebhookSignature(
         now,
         timeDiff,
       });
-      return {
-        isValid: false,
-        error: "Timestamp validation failed",
-        timestamp: timestampNum,
-      };
+      throw new TimestampValidationError(timestampNum, now, timeDiff);
     }
 
     // Parse the signature header
@@ -76,11 +77,7 @@ export async function verifyWebhookSignature(
         message: "Invalid signature format",
         signature,
       });
-      return {
-        isValid: false,
-        error: "Invalid signature format",
-        timestamp: timestampNum,
-      };
+      throw new InvalidSignatureFormatError(signature);
     }
 
     const algorithm = signatureParts[0];
@@ -92,11 +89,7 @@ export async function verifyWebhookSignature(
         message: "Unsupported signature algorithm",
         algorithm,
       });
-      return {
-        isValid: false,
-        error: "Unsupported signature algorithm",
-        timestamp: timestampNum,
-      };
+      throw new InvalidSignatureFormatError(signature, { algorithm });
     }
 
     // Create the expected signature
@@ -118,11 +111,13 @@ export async function verifyWebhookSignature(
         message: "Signature length mismatch during verification",
         error: err instanceof Error ? err.message : String(err),
       });
-      return {
-        isValid: false,
-        error: "Signature verification failed",
-        timestamp: timestampNum,
-      };
+      throw new SignatureVerificationError(
+        providedSignature,
+        expectedSignature,
+        {
+          error: "Signature length mismatch",
+        }
+      );
     }
 
     if (!isValid) {
@@ -131,14 +126,27 @@ export async function verifyWebhookSignature(
         providedSignature,
         expectedSignature: expectedSignature.substring(0, 8) + "...",
       });
+      throw new SignatureVerificationError(
+        providedSignature,
+        expectedSignature
+      );
     }
 
     return {
-      isValid,
-      error: isValid ? undefined : "Signature verification failed",
+      isValid: true,
       timestamp: timestampNum,
     };
   } catch (error) {
+    // Re-throw custom webhook errors
+    if (
+      error instanceof TimestampValidationError ||
+      error instanceof InvalidSignatureFormatError ||
+      error instanceof SignatureVerificationError
+    ) {
+      throw error;
+    }
+
+    // Log and return generic error for unexpected errors
     logger.error({
       message: "Error during webhook signature verification",
       error: error instanceof Error ? error.message : String(error),
@@ -161,15 +169,15 @@ export function parseGitHubWebhookEvent(
   try {
     // Basic validation of required fields
     if (!payload.action || !payload.repository || !payload.sender) {
-      throw new StatusError("Invalid webhook payload structure", 400);
+      throw new InvalidWebhookPayloadError("Invalid webhook payload structure");
     }
 
     return payload as GitHubWebhookEvent;
   } catch (error) {
-    if (error instanceof StatusError) {
+    if (error instanceof InvalidWebhookPayloadError) {
       throw error;
     }
-    throw new StatusError("Failed to parse webhook payload", 400);
+    throw new InvalidWebhookPayloadError("Failed to parse webhook payload");
   }
 }
 

@@ -5,7 +5,11 @@ import {
   parseGitHubWebhookEvent,
   processWebhookEvent,
 } from "./webhooks.service";
-import { StatusError } from "../../errors/status";
+import {
+  MissingSignatureError,
+  InvalidWebhookPayloadError,
+  SignatureVerificationError,
+} from "../../errors/webhook";
 import logger from "../../utils/logger";
 
 /**
@@ -18,23 +22,24 @@ async function handleWebhook(req: Request, res: Response) {
 
   // Validate required headers
   if (!signature) {
-    throw new StatusError("Missing X-Hub-Signature-256 header", 401, {
+    throw new MissingSignatureError({
       path: req.originalUrl,
       method: req.method,
     });
   }
 
   if (!timestamp) {
-    throw new StatusError("Missing X-Hub-Signature-256-Timestamp header", 401, {
+    throw new MissingSignatureError({
       path: req.originalUrl,
       method: req.method,
+      missingHeader: "X-Hub-Signature-256-Timestamp",
     });
   }
 
   // Get the raw body for signature verification
   const rawBody = req.body;
   if (!rawBody) {
-    throw new StatusError("Missing request body", 400, {
+    throw new InvalidWebhookPayloadError("Missing request body", {
       path: req.originalUrl,
       method: req.method,
     });
@@ -51,25 +56,6 @@ async function handleWebhook(req: Request, res: Response) {
     timestamp
   );
 
-  if (!verificationResult.isValid) {
-    logger.warn({
-      message: "Webhook signature verification failed",
-      error: verificationResult.error,
-      timestamp: verificationResult.timestamp,
-      path: req.originalUrl,
-      method: req.method,
-    });
-
-    throw new StatusError(
-      verificationResult.error || "Webhook signature verification failed",
-      401,
-      {
-        path: req.originalUrl,
-        method: req.method,
-      }
-    );
-  }
-
   // Parse and validate the webhook payload
   let event;
   try {
@@ -82,7 +68,7 @@ async function handleWebhook(req: Request, res: Response) {
       path: req.originalUrl,
       method: req.method,
     });
-    throw new StatusError("Invalid webhook payload", 400, {
+    throw new InvalidWebhookPayloadError("Invalid webhook payload", {
       path: req.originalUrl,
       method: req.method,
     });
