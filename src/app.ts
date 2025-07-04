@@ -24,16 +24,8 @@ app.use(express.json());
 
 // Import routes
 import errorHandler from "./errors/errorHandler";
-import { NotFoundError } from "./errors/http";
-import authMiddleware from "./middleware/auth";
-
-// Apply middleware
-app.use(authMiddleware);
 
 // Error handling
-app.use((req, _res, next) => {
-  next(new NotFoundError(`Not found: ${req.originalUrl}`));
-});
 app.use(errorHandler);
 
 // Graceful shutdown

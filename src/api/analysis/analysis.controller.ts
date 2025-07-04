@@ -54,6 +54,13 @@ export async function analyzePR(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  logger.info({
+    message: "analyzePR controller called",
+    url: req.originalUrl,
+    method: req.method,
+    body: req.body,
+  });
+
   try {
     const { owner, repo, pull_number } = req.body;
 
