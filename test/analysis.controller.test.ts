@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
+import express from "express";
 import { StatusError } from "../src/errors/status";
-import app from "../src/app";
 import { NotFoundError } from "../src/errors/http";
+import authMiddleware from "../src/middleware/auth";
+import analysisRouter from "../src/api/analysis/analysis.routes";
 
 // Mock the auth middleware
 vi.mock("../src/middleware/auth", () => ({
@@ -78,6 +80,11 @@ vi.mock("../src/utils/github", () => ({
     return Promise.resolve({ number: pull_number });
   }),
 }));
+
+// Create test app
+const app = express();
+app.use(express.json());
+app.use("/api/v1/code-analysis", authMiddleware, analysisRouter);
 
 describe("Analysis Controller", () => {
   beforeEach(() => {

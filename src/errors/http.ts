@@ -18,6 +18,13 @@ export class BadRequestError extends HttpError {
   }
 }
 
+export class UnauthorizedError extends HttpError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, 401, context);
+    this.name = "UnauthorizedError";
+  }
+}
+
 export class NotFoundError extends HttpError {
   constructor(message: string, context?: Record<string, unknown>) {
     super(message, 404, context);

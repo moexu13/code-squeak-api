@@ -20,26 +20,14 @@ redisClient.connect().catch((err) => {
 });
 
 // Middleware
-app.use(express.json());
+// Limit JSON payload size to prevent memory attacks
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // Import routes
-import analysisRouter from "./api/analysis/analysis.routes";
-import githubRouter from "./api/github/github.routes";
 import errorHandler from "./errors/errorHandler";
-import { NotFoundError } from "./errors/http";
-import authMiddleware from "./middleware/auth";
-
-// Apply middleware
-app.use(authMiddleware);
-
-// Mount routes
-app.use("/api/v1/code-analysis", analysisRouter);
-app.use("/api/v1/github", githubRouter);
 
 // Error handling
-app.use((req, _res, next) => {
-  next(new NotFoundError(`Not found: ${req.originalUrl}`));
-});
 app.use(errorHandler);
 
 // Graceful shutdown
