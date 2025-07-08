@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from "express";
+import logger from "../utils/logger";
+import { sanitizeErrorMessage } from "../utils/sanitize";
 
 /**
  * Creates a payload size limit middleware
@@ -62,9 +64,12 @@ export const payloadLogger = (
   const contentLength = parseInt(req.headers["content-length"] || "0", 10);
 
   if (contentLength > 0) {
-    console.log(
-      `[PAYLOAD] ${req.method} ${req.path} - ${formatBytes(contentLength)}`
-    );
+    logger.info({
+      message: "Payload size logged",
+      method: req.method,
+      path: sanitizeErrorMessage(req.path),
+      size: formatBytes(contentLength),
+    });
   }
 
   next();

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import asyncErrorBoundary from "../../errors/asyncErrorBoundary";
+import { sanitizeErrorMessage } from "../../utils/sanitize";
 import {
   verifyWebhookSignature,
   parseGitHubWebhookEvent,
@@ -8,7 +9,6 @@ import {
 import {
   MissingSignatureError,
   InvalidWebhookPayloadError,
-  SignatureVerificationError,
 } from "../../errors/webhook";
 import logger from "../../utils/logger";
 
@@ -50,11 +50,7 @@ async function handleWebhook(req: Request, res: Response) {
     typeof rawBody === "string" ? rawBody : JSON.stringify(rawBody);
 
   // Verify the webhook signature
-  const verificationResult = await verifyWebhookSignature(
-    payloadString,
-    signature,
-    timestamp
-  );
+  await verifyWebhookSignature(payloadString, signature, timestamp);
 
   // Parse and validate the webhook payload
   let event;
@@ -62,9 +58,12 @@ async function handleWebhook(req: Request, res: Response) {
     const payload = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
     event = parseGitHubWebhookEvent(payload);
   } catch (error) {
+    const sanitizedErrorMessage = sanitizeErrorMessage(
+      error instanceof Error ? error.message : String(error)
+    );
     logger.error({
       message: "Failed to parse webhook payload",
-      error: error instanceof Error ? error.message : String(error),
+      error: sanitizedErrorMessage,
       path: req.originalUrl,
       method: req.method,
     });

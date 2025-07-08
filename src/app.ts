@@ -2,6 +2,8 @@ import express from "express";
 import { init } from "@sentry/node";
 import { config } from "./config/env";
 import { redisClient } from "./utils/redis";
+import logger from "./utils/logger";
+import { sanitizeErrorMessage } from "./utils/sanitize";
 
 // Initialize Sentry first
 init({
@@ -15,7 +17,12 @@ const app = express();
 
 // Initialize Redis
 redisClient.connect().catch((err) => {
-  console.error("Failed to connect to Redis:", err);
+  logger.error({
+    message: "Failed to connect to Redis",
+    error: sanitizeErrorMessage(
+      err instanceof Error ? err.message : String(err)
+    ),
+  });
   process.exit(1);
 });
 

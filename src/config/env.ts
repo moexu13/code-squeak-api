@@ -1,10 +1,18 @@
 import dotenv from "dotenv";
 import logger from "../utils/logger";
+import { sanitizeErrorMessage } from "../utils/sanitize";
 
 // Load environment variables
 const result = dotenv.config();
 if (result.error) {
-  logger.error({ message: "Error loading .env file", error: result.error });
+  logger.error({
+    message: "Error loading .env file",
+    error: sanitizeErrorMessage(
+      result.error instanceof Error
+        ? result.error.message
+        : String(result.error)
+    ),
+  });
 }
 
 // Configuration interface
