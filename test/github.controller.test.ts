@@ -212,5 +212,19 @@ describe("GitHub Controller", () => {
         .send({ data: { comment: "Test comment" } })
         .expect(404);
     });
+
+    it("should reject payloads larger than 100KB", async () => {
+      const response = await request(app)
+        .post("/api/v1/github/test-owner/test-repo/123/comments")
+        .set("Authorization", `Bearer ${TEST_API_KEY}`)
+        .set("Content-Length", (102400 + 100).toString()) // 100KB + 100 bytes
+        .send({ data: { comment: "Test comment" } });
+
+      expect(response.status).toBe(413);
+      expect(response.body.error).toBe("Payload too large");
+      expect(response.body.message).toBe(
+        "Comment payload too large. Maximum size is 100KB for pull request comments"
+      );
+    });
   });
 });

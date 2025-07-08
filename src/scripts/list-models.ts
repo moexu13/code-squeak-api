@@ -22,7 +22,10 @@ async function listModels() {
       console.log(`- ${model.id}`);
     });
   } catch (error) {
-    console.error("Error fetching models:", error);
+    console.error(
+      "Error fetching models:",
+      error instanceof Error ? error.message : "Unknown error"
+    );
   }
 }
 
