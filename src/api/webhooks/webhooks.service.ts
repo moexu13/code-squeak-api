@@ -238,7 +238,9 @@ export async function processWebhookEvent(event: GitHubWebhookEvent): Promise<{
   } catch (error) {
     logger.error({
       message: "Error processing webhook event",
-      error: error instanceof Error ? error.message : String(error),
+      error: sanitizeErrorMessage(
+        error instanceof Error ? error.message : String(error)
+      ),
       event: {
         action: event.action,
         repository: event.repository.full_name,
