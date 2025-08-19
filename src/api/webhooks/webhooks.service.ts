@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import logger from "../../utils/logger";
+import { sanitizeErrorMessage } from "../../utils/sanitize";
 import {
   InvalidSignatureFormatError,
   TimestampValidationError,
@@ -109,7 +110,9 @@ export async function verifyWebhookSignature(
       // This error occurs if the signature lengths don't match
       logger.warn({
         message: "Signature length mismatch during verification",
-        error: err instanceof Error ? err.message : String(err),
+        error: sanitizeErrorMessage(
+          err instanceof Error ? err.message : String(err)
+        ),
       });
       throw new SignatureVerificationError(
         providedSignature,
@@ -149,7 +152,9 @@ export async function verifyWebhookSignature(
     // Log and return generic error for unexpected errors
     logger.error({
       message: "Error during webhook signature verification",
-      error: error instanceof Error ? error.message : String(error),
+      error: sanitizeErrorMessage(
+        error instanceof Error ? error.message : String(error)
+      ),
     });
     return {
       isValid: false,
