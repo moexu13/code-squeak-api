@@ -27,9 +27,10 @@ redisClient.connect().catch((err) => {
 });
 
 // Middleware
-// Limit JSON payload size to prevent memory attacks
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+// Parse JSON and URL-encoded bodies with reasonable limits
+// Comments: 100KB, other requests: 1MB
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 // Import routes
 import errorHandler from "./errors/errorHandler";

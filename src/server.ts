@@ -61,7 +61,7 @@ app.use((req, _res, next) => {
     path: req.path,
     baseUrl: req.baseUrl,
     routePath: req.route?.path,
-    stack: new Error().stack?.split("\n").slice(1, 5), // Show call stack
+    errorCode: "ROUTE_NOT_FOUND",
     headers: {
       authorization: req.headers.authorization ? "present" : "missing",
       "content-type": req.headers["content-type"],

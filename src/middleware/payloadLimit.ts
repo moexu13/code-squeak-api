@@ -10,6 +10,7 @@ import { sanitizeErrorMessage } from "../utils/sanitize";
  */
 export const payloadLimit = (maxSize: number, message?: string) => {
   return (req: Request, res: Response, next: NextFunction): void => {
+    // Check Content-Length header first
     const contentLength = parseInt(req.headers["content-length"] || "0", 10);
 
     if (contentLength > maxSize) {
@@ -23,6 +24,24 @@ export const payloadLimit = (maxSize: number, message?: string) => {
         receivedSize: formatBytes(contentLength),
       });
       return;
+    }
+
+    // Also check actual body size if available (for JSON/URL-encoded bodies)
+    if (req.body && typeof req.body === "object") {
+      const bodySize = JSON.stringify(req.body).length;
+      if (bodySize > maxSize) {
+        const errorMessage =
+          message ||
+          `Payload too large. Maximum size is ${formatBytes(maxSize)}`;
+
+        res.status(413).json({
+          error: "Payload too large",
+          message: errorMessage,
+          maxSize: formatBytes(maxSize),
+          receivedSize: formatBytes(bodySize),
+        });
+        return;
+      }
     }
 
     next();
