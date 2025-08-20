@@ -13,7 +13,7 @@ const methodNotAllowed = (req: any, _res: any, next: any) => {
 };
 
 // Test route for integration testing
-router.get("/test", (req, res) => {
+router.get("/test", (_req, res) => {
   res.json({ message: "Analysis router is working" });
 });
 
