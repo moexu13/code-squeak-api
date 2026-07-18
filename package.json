@@ -12,31 +12,30 @@
     "worker": "ts-node src/workers/analysis.worker.ts"
   },
   "devDependencies": {
-    "@types/express": "^5.0.3",
+    "@types/express": "^5.0.6",
     "@types/http-errors": "^2.0.5",
-    "@types/node": "^22.16.0",
+    "@types/node": "^22.20.1",
     "@types/supertest": "^6.0.3",
-    "concurrently": "^9.2.0",
-    "supertest": "^7.1.1",
+    "concurrently": "^9.2.4",
+    "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
-    "@octokit/app": "^16.0.1",
-    "@octokit/auth-app": "^8.0.1",
+    "@octokit/app": "^16.1.2",
+    "@octokit/auth-app": "^8.2.0",
     "@octokit/rest": "^21.1.1",
-    "@sentry/node": "^9.34.0",
+    "@sentry/node": "^9.47.1",
     "@unkey/api": "^0.36.0",
     "dotenv": "^16.6.1",
-    "express": "^5.1.0",
-    "http-errors": "^2.0.0",
-    "ioredis": "^5.6.1",
-    "redis": "^5.5.6",
-    "tsx": "^4.20.3",
-    "vite-express": "^0.21.1",
-    "vitest": "^3.2.4"
+    "express": "^5.2.1",
+    "http-errors": "^2.0.1",
+    "ioredis": "^5.11.1",
+    "redis": "^5.12.1",
+    "tsx": "^4.23.1",
+    "vitest": "^3.2.7"
   }
 }

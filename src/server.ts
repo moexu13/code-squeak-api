@@ -1,5 +1,4 @@
 import { config } from "./config/env";
-import ViteExpress from "vite-express";
 import logger from "./utils/logger";
 
 import githubRouter from "./api/github/github.routes";
@@ -72,7 +71,7 @@ app.use((req, _res, next) => {
 });
 app.use(errorHandler);
 
-ViteExpress.listen(app, config.server.port, () =>
+app.listen(config.server.port, () =>
   logger.info({
     message: `Server is listening on port ${config.server.port}...`,
   })
