@@ -77,7 +77,7 @@ function formatBytes(bytes: number): string {
  */
 export const payloadLogger = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) => {
   const contentLength = parseInt(req.headers["content-length"] || "0", 10);

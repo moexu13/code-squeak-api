@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"ts-node-dev --respawn src/server.ts\" \"ts-node-dev --respawn src/workers/analysis.worker.ts\"",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "test": "vitest run",
     "list-models": "ts-node src/scripts/list-models.ts",
     "worker": "ts-node src/workers/analysis.worker.ts"

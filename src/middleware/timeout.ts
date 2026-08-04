@@ -7,7 +7,7 @@ import { Request, Response, NextFunction } from "express";
  * @returns Express middleware function
  */
 export const timeout = (ms: number, message?: string) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (_req: Request, res: Response, next: NextFunction) => {
     const timeoutMessage =
       message || `Request processing took longer than ${ms}ms`;
 

@@ -28,11 +28,17 @@ class RedisClient {
     } as RedisClientOptions);
 
     this.client.on("error", (err) => {
+      const aggregateMessages = (err as { errors?: Error[] }).errors
+        ?.map((e) => e.message)
+        .join("; ");
+      const rawMessage =
+        aggregateMessages ||
+        (err instanceof Error ? err.message : String(err));
+
       logger.error({
         message: "Redis Client Error",
-        error: sanitizeErrorMessage(
-          err instanceof Error ? err.message : String(err)
-        ),
+        code: (err as { code?: string }).code,
+        error: sanitizeErrorMessage(rawMessage),
       });
       this.isConnected = false;
     });
