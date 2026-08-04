@@ -5,6 +5,12 @@ export default defineConfig({
   server: {
     port: 3000,
   },
+  build: {
+    outDir: "dist",
+    rollupOptions: {
+      input: "src/server.ts",
+    },
+  },
   // Vitest configuration
   test: {
     // Use threads pool for better performance

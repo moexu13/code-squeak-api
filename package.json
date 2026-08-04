@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"ts-node-dev --respawn src/server.ts\" \"ts-node-dev --respawn src/workers/analysis.worker.ts\"",
     "build": "tsc",
-    "start": "node dist/src/server.js",
+    "start": "node dist/server.js",
     "test": "vitest run",
     "list-models": "ts-node src/scripts/list-models.ts",
     "worker": "ts-node src/workers/analysis.worker.ts"
@@ -17,12 +17,11 @@
     "@types/node": "^22.20.1",
     "@types/supertest": "^6.0.3",
     "concurrently": "^9.2.4",
+    "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3",
-    "supertest": "^7.2.2",
-    "vite": "^6.4.3",
-    "vitest": "^3.2.7"
+    "vite": "^6.4.3"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
@@ -36,6 +35,8 @@
     "http-errors": "^2.0.1",
     "ioredis": "^5.11.1",
     "redis": "^5.12.1",
-    "tsx": "^4.23.1"
+    "tsx": "^4.23.1",
+    "vite-express": "^0.21.1",
+    "vitest": "^3.2.7"
   }
 }

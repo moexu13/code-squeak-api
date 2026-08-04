@@ -2,7 +2,6 @@ import { createClient } from "redis";
 import type { RedisClientOptions } from "redis";
 import { config } from "../config/env";
 import logger from "./logger";
-import { sanitizeErrorMessage } from "./sanitize";
 
 class RedisClient {
   private static instance: RedisClient;
@@ -28,18 +27,7 @@ class RedisClient {
     } as RedisClientOptions);
 
     this.client.on("error", (err) => {
-      const aggregateMessages = (err as { errors?: Error[] }).errors
-        ?.map((e) => e.message)
-        .join("; ");
-      const rawMessage =
-        aggregateMessages ||
-        (err instanceof Error ? err.message : String(err));
-
-      logger.error({
-        message: "Redis Client Error",
-        code: (err as { code?: string }).code,
-        error: sanitizeErrorMessage(rawMessage),
-      });
+      logger.error({ message: "Redis Client Error", error: err });
       this.isConnected = false;
     });
 
