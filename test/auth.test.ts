@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, vi } from "vitest";
 import request from "supertest";
 import express from "express";
 import authMiddleware from "../src/middleware/auth";
+import { UnauthorizedError } from "../src/errors/http";
 
 // Mock the Unkey client
 vi.mock("@unkey/api", () => ({
@@ -29,12 +30,27 @@ describe("Authentication Middleware", () => {
     app.get("/test", authMiddleware, (_, res) => {
       res.status(200).send("Authenticated");
     });
+
+    // Add error handler to return JSON errors instead of HTML
+    app.use((err: any, _req: any, res: any, next: any) => {
+      if (err instanceof UnauthorizedError) {
+        res.status(err.status).json({
+          error: "Something went wrong",
+          message: err.message,
+        });
+      } else {
+        next(err);
+      }
+    });
   });
 
   it("should return 401 when no API key is provided", async () => {
     const response = await request(app).get("/test");
     expect(response.status).toBe(401);
-    expect(response.text).toBe("Unauthorized");
+    expect(response.body).toEqual({
+      error: "Something went wrong",
+      message: "Missing API key",
+    });
   });
 
   it("should return 401 when invalid API key is provided", async () => {
@@ -42,7 +58,10 @@ describe("Authentication Middleware", () => {
       .get("/test")
       .set("Authorization", "Bearer invalid-key");
     expect(response.status).toBe(401);
-    expect(response.text).toBe("Unauthorized");
+    expect(response.body).toEqual({
+      error: "Something went wrong",
+      message: "Invalid API key",
+    });
   });
 
   it("should return 200 when valid API key is provided", async () => {

@@ -212,5 +212,19 @@ describe("GitHub Controller", () => {
         .send({ data: { comment: "Test comment" } })
         .expect(404);
     });
+
+    it("should reject payloads larger than 100KB", async () => {
+      // Create a payload larger than Express's 100KB limit
+      const largeComment = "x".repeat(102400 + 1000); // 100KB + 1000 bytes
+      const payload = { data: { comment: largeComment } };
+
+      const response = await request(app)
+        .post("/api/v1/github/test-owner/test-repo/123/comments")
+        .set("Authorization", `Bearer ${TEST_API_KEY}`)
+        .send(payload);
+
+      // Express will reject this with a 413 status
+      expect(response.status).toBe(413);
+    });
   });
 });

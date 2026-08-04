@@ -15,17 +15,27 @@ async function list(req: Request, res: Response) {
   const page = parseInt(req.query.page as string) || 1;
   const per_page = parseInt(req.query.per_page as string) || 10;
 
-  const data = await listRepos(req.params.owner, { page, per_page });
+  const data = await listRepos(req.params.owner as string, {
+    page,
+    per_page,
+  });
   res.json(data);
 }
 
 async function read(req: Request, res: Response) {
-  const data = await readRepo(req.params.owner, req.params.repo);
+  const data = await readRepo(
+    req.params.owner as string,
+    req.params.repo as string
+  );
   res.json(data);
 }
 
 async function create(req: Request, res: Response) {
-  const { owner, repo, pull_number } = req.params;
+  const { owner, repo, pull_number } = req.params as {
+    owner: string;
+    repo: string;
+    pull_number: string;
+  };
   const {
     data: { comment },
   } = req.body;
@@ -55,7 +65,11 @@ async function create(req: Request, res: Response) {
 }
 
 async function getDiff(req: Request, res: Response) {
-  const { owner, repo, pull_number } = req.params;
+  const { owner, repo, pull_number } = req.params as {
+    owner: string;
+    repo: string;
+    pull_number: string;
+  };
 
   try {
     const diff = await getPullRequestDiff(owner, repo, parseInt(pull_number));
