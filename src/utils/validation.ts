@@ -1,8 +1,6 @@
 import { BadRequestError } from "../errors/http";
-import {
-  AnalysisParams,
-  PRAnalysisParams,
-} from "../api/analysis/analysis.service";
+import { AnalysisParams } from "../api/analysis/analysis.service";
+import { PRAnalysisParams } from "../api/analysis/types/queue";
 
 // Constants for validation
 export const MAX_DIFF_SIZE = 1024 * 1024; // 1MB

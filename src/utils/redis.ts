@@ -2,6 +2,7 @@ import { createClient } from "redis";
 import type { RedisClientOptions } from "redis";
 import { config } from "../config/env";
 import logger from "./logger";
+import { sanitizeErrorMessage } from "./sanitize";
 
 class RedisClient {
   private static instance: RedisClient;
@@ -27,7 +28,12 @@ class RedisClient {
     } as RedisClientOptions);
 
     this.client.on("error", (err) => {
-      logger.error({ message: "Redis Client Error", error: err });
+      logger.error({
+        message: "Redis Client Error",
+        error: sanitizeErrorMessage(
+          err instanceof Error ? err.message : String(err)
+        ),
+      });
       this.isConnected = false;
     });
 

@@ -166,7 +166,12 @@ export class AnalysisWorker extends BaseWorker {
 if (require.main === module) {
   const worker = new AnalysisWorker();
   worker.start().catch((error) => {
-    console.error("Worker failed to start:", error);
+    logger.error({
+      message: "Worker failed to start",
+      error: sanitizeErrorMessage(
+        error instanceof Error ? error.message : String(error)
+      ),
+    });
     process.exit(1);
   });
 }

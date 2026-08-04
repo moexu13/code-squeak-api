@@ -2,6 +2,8 @@ import express from "express";
 import { init } from "@sentry/node";
 import { config } from "./config/env";
 import { redisClient } from "./utils/redis";
+import logger from "./utils/logger";
+import { sanitizeErrorMessage } from "./utils/sanitize";
 
 // Initialize Sentry first
 init({
@@ -15,31 +17,25 @@ const app = express();
 
 // Initialize Redis
 redisClient.connect().catch((err) => {
-  console.error("Failed to connect to Redis:", err);
+  logger.error({
+    message: "Failed to connect to Redis",
+    error: sanitizeErrorMessage(
+      err instanceof Error ? err.message : String(err)
+    ),
+  });
   process.exit(1);
 });
 
 // Middleware
-app.use(express.json());
+// Parse JSON and URL-encoded bodies with reasonable limits
+// Comments: 100KB, other requests: 1MB
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 // Import routes
-import analysisRouter from "./api/analysis/analysis.routes";
-import githubRouter from "./api/github/github.routes";
 import errorHandler from "./errors/errorHandler";
-import { NotFoundError } from "./errors/http";
-import authMiddleware from "./middleware/auth";
-
-// Apply middleware
-app.use(authMiddleware);
-
-// Mount routes
-app.use("/api/v1/code-analysis", analysisRouter);
-app.use("/api/v1/github", githubRouter);
 
 // Error handling
-app.use((req, _res, next) => {
-  next(new NotFoundError(`Not found: ${req.originalUrl}`));
-});
 app.use(errorHandler);
 
 // Graceful shutdown
